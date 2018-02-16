@@ -125,9 +125,11 @@ BITCOIN_CORE_H = \
   dosman.h \
   expedited.h \
   fs.h \
+  graphene.h \
   dstencode.h \
   httprpc.h \
   httpserver.h \
+  iblt.h \
   init.h \
   key.h \
   keystore.h \
@@ -217,8 +219,10 @@ libbitcoin_server_a_SOURCES = \
   consensus/tx_verify.cpp \
   dosman.cpp \
   expedited.cpp \
+  graphene.cpp \
   httprpc.cpp \
   httpserver.cpp \
+  iblt.cpp \
   init.cpp \
   dbwrapper.cpp \
   main.cpp \
