@@ -130,6 +130,11 @@ bool FlushStateToDisk(CValidationState &state, FlushStateMode mode)
         {
             nLastSetChain = nNow;
         }
+
+        // If possible adjust the max size of the coin cache (nCoinCacheUsage) based on current available memory. Do
+        // this before determinining whether to flush the cache or not in the steps that follow.
+        AdjustCoinCacheSize();
+
         size_t cacheSize = pcoinsTip->DynamicMemoryUsage();
         static int64_t nSizeAfterLastFlush = 0;
         // The cache is close to the limit. Try to flush and trim.
