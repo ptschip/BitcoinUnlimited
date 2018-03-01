@@ -8,6 +8,7 @@
 
 #include "addrman.h"
 #include "arith_uint256.h"
+#include "blockdb/blockdb_sequential.h"
 #include "chainparams.h"
 #include "checkpoints.h"
 #include "checkqueue.h"
@@ -151,18 +152,6 @@ CBlockIndex *pindexBestInvalid GUARDED_BY(cs_main) = nullptr;
 std::set<CBlockIndex *, CBlockIndexWorkComparator> setBlockIndexCandidates GUARDED_BY(cs_main);
 /** Number of nodes with fSyncStarted. */
 int nSyncStarted = 0;
-/** All pairs A->B, where A (or one of its ancestors) misses transactions, but B has transactions.
- * Pruned nodes may have entries where B is missing data.
- */
-std::multimap<CBlockIndex *, CBlockIndex *> mapBlocksUnlinked GUARDED_BY(cs_main);
-
-std::vector<CBlockFileInfo> vinfoBlockFile GUARDED_BY(cs_main);
-int nLastBlockFile = 0;
-/** Global flag to indicate we should check to see if there are
- *  block/undo files that should be deleted.  Set on startup
- *  or if we allocate more file space when we're in prune mode
- */
-bool fCheckForPruning = false;
 
 /**
  * Every received block is assigned a unique and increasing identifier, so we
@@ -223,6 +212,23 @@ std::atomic<int> nPreferredDownload{0};
 std::set<int> setDirtyFileInfo GUARDED_BY(cs_main);
 
 } // anon namespace
+
+/** All pairs A->B, where A (or one of its ancestors) misses transactions, but B has transactions.
+ * Pruned nodes may have entries where B is missing data.
+ */
+std::multimap<CBlockIndex *, CBlockIndex *> mapBlocksUnlinked;
+
+/** Global flag to indicate we should check to see if there are
+ *  block/undo files that should be deleted.  Set on startup
+ *  or if we allocate more file space when we're in prune mode
+ */
+bool fCheckForPruning = false;
+
+/** Dirty block file entries. */
+std::set<int> setDirtyFileInfo;
+
+std::vector<CBlockFileInfo> vinfoBlockFile;
+int nLastBlockFile = 0;
 
 /** Dirty block index entries. */
 std::set<CBlockIndex *> setDirtyBlockIndex GUARDED_BY(cs_main);
@@ -1426,6 +1432,7 @@ bool UndoReadFromDisk(CBlockUndo &blockundo, const CDiskBlockPos &pos, const uin
 
     return true;
 }
+} // anon namespace
 
 /** Abort with a message */
 bool AbortNode(const std::string &strMessage, const std::string &userMessage = "")
@@ -1444,8 +1451,6 @@ bool AbortNode(CValidationState &state, const std::string &strMessage, const std
     AbortNode(strMessage, userMessage);
     return state.Error(strMessage);
 }
-
-} // anon namespace
 
 enum DisconnectResult
 {
