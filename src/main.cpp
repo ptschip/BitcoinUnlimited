@@ -9,6 +9,7 @@
 
 #include "addrman.h"
 #include "arith_uint256.h"
+#include "blockdb/blockdb_sequential.h"
 #include "chainparams.h"
 #include "checkpoints.h"
 #include "checkqueue.h"
@@ -186,18 +187,6 @@ CBlockIndex *pindexBestInvalid;
 std::set<CBlockIndex *, CBlockIndexWorkComparator> setBlockIndexCandidates;
 /** Number of nodes with fSyncStarted. */
 int nSyncStarted = 0;
-/** All pairs A->B, where A (or one of its ancestors) misses transactions, but B has transactions.
- * Pruned nodes may have entries where B is missing data.
- */
-std::multimap<CBlockIndex *, CBlockIndex *> mapBlocksUnlinked;
-
-std::vector<CBlockFileInfo> vinfoBlockFile;
-int nLastBlockFile = 0;
-/** Global flag to indicate we should check to see if there are
- *  block/undo files that should be deleted.  Set on startup
- *  or if we allocate more file space when we're in prune mode
- */
-bool fCheckForPruning = false;
 
 /**
  * Every received block is assigned a unique and increasing identifier, so we
@@ -239,12 +228,26 @@ uint256 hashRecentRejectsChainTip;
 /** Number of preferable block download peers. */
 int nPreferredDownload = 0;
 
-/** Dirty block file entries. */
-std::set<int> setDirtyFileInfo;
-
 /** Number of peers from which we're downloading blocks. */
 int nPeersWithValidatedDownloads = 0;
 } // anon namespace
+
+/** All pairs A->B, where A (or one of its ancestors) misses transactions, but B has transactions.
+ * Pruned nodes may have entries where B is missing data.
+ */
+std::multimap<CBlockIndex *, CBlockIndex *> mapBlocksUnlinked;
+
+/** Global flag to indicate we should check to see if there are
+ *  block/undo files that should be deleted.  Set on startup
+ *  or if we allocate more file space when we're in prune mode
+ */
+bool fCheckForPruning = false;
+
+/** Dirty block file entries. */
+std::set<int> setDirtyFileInfo;
+
+std::vector<CBlockFileInfo> vinfoBlockFile;
+int nLastBlockFile = 0;
 
 /** Dirty block index entries. */
 std::set<CBlockIndex *> setDirtyBlockIndex;
@@ -1799,6 +1802,7 @@ bool UndoReadFromDisk(CBlockUndo &blockundo, const CDiskBlockPos &pos, const uin
 
     return true;
 }
+} // anon namespace
 
 /** Abort with a message */
 bool AbortNode(const std::string &strMessage, const std::string &userMessage = "")
@@ -1817,8 +1821,6 @@ bool AbortNode(CValidationState &state, const std::string &strMessage, const std
     AbortNode(strMessage, userMessage);
     return state.Error(strMessage);
 }
-
-} // anon namespace
 
 enum DisconnectResult
 {
