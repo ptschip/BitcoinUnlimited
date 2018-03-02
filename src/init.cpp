@@ -12,6 +12,7 @@
 
 #include "addrman.h"
 #include "amount.h"
+#include "blockdb/blockdb_leveldb.h"
 #include "blockdb/blockdb_sequential.h"
 #include "blockdb/blockdb_wrapper.h"
 #include "chain.h"
@@ -242,6 +243,8 @@ void Shutdown()
         pcoinsdbview = NULL;
         delete pblocktree;
         pblocktree = NULL;
+        delete pblockfull;
+        pblockfull = NULL;
     }
 #ifdef ENABLE_WALLET
     if (pwalletMain)
@@ -997,9 +1000,11 @@ bool AppInit2(Config &config, boost::thread_group &threadGroup, CScheduler &sche
                 delete pcoinsdbview;
                 delete pcoinscatcher;
                 delete pblocktree;
+                delete pblockfull;
 
                 uiInterface.InitMessage(_("Opening Block database..."));
                 pblocktree = new CBlockTreeDB(nBlockTreeDBCache, false, fReindex);
+                pblockfull = new CFullBlockDB(nBlockTreeDBCache, false, false);
                 uiInterface.InitMessage(_("Opening UTXO database..."));
                 pcoinsdbview = new CCoinsViewDB(nCoinDBCache, false, fReindex);
                 pcoinscatcher = new CCoinsViewErrorCatcher(pcoinsdbview);
