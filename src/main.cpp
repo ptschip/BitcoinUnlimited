@@ -3178,15 +3178,18 @@ bool FindBlockPos(CValidationState &state,
         {
             if (fPruneMode)
                 fCheckForPruning = true;
-            if (CheckDiskSpace(nNewChunks * BLOCKFILE_CHUNK_SIZE - pos.nPos) && (BLOCK_DB_MODE == SEQUENTIAL_BLOCK_FILES || BLOCK_DB_MODE == LEVELDB_AND_SEQUENTIAL))
+            if (CheckDiskSpace(nNewChunks * BLOCKFILE_CHUNK_SIZE - pos.nPos))
             {
-                FILE *file = OpenBlockFile(pos);
-                if (file)
+                if(BLOCK_DB_MODE == SEQUENTIAL_BLOCK_FILES || BLOCK_DB_MODE == LEVELDB_AND_SEQUENTIAL)
                 {
-                    LOGA("Pre-allocating up to position 0x%x in blk%05u.dat\n", nNewChunks * BLOCKFILE_CHUNK_SIZE,
-                        pos.nFile);
-                    AllocateFileRange(file, pos.nPos, nNewChunks * BLOCKFILE_CHUNK_SIZE - pos.nPos);
-                    fclose(file);
+                    FILE *file = OpenBlockFile(pos);
+                    if (file)
+                    {
+                        LOGA("Pre-allocating up to position 0x%x in blk%05u.dat\n", nNewChunks * BLOCKFILE_CHUNK_SIZE,
+                            pos.nFile);
+                        AllocateFileRange(file, pos.nPos, nNewChunks * BLOCKFILE_CHUNK_SIZE - pos.nPos);
+                        fclose(file);
+                    }
                 }
             }
             else
@@ -3215,15 +3218,18 @@ bool FindUndoPos(CValidationState &state, int nFile, CDiskBlockPos &pos, unsigne
     {
         if (fPruneMode)
             fCheckForPruning = true;
-        if (CheckDiskSpace(nNewChunks * UNDOFILE_CHUNK_SIZE - pos.nPos) && (BLOCK_DB_MODE == SEQUENTIAL_BLOCK_FILES || BLOCK_DB_MODE == LEVELDB_AND_SEQUENTIAL))
+        if (CheckDiskSpace(nNewChunks * UNDOFILE_CHUNK_SIZE - pos.nPos))
         {
-            FILE *file = OpenUndoFile(pos);
-            if (file)
+            if(BLOCK_DB_MODE == SEQUENTIAL_BLOCK_FILES || BLOCK_DB_MODE == LEVELDB_AND_SEQUENTIAL)
             {
-                LOGA(
-                    "Pre-allocating up to position 0x%x in rev%05u.dat\n", nNewChunks * UNDOFILE_CHUNK_SIZE, pos.nFile);
-                AllocateFileRange(file, pos.nPos, nNewChunks * UNDOFILE_CHUNK_SIZE - pos.nPos);
-                fclose(file);
+                FILE *file = OpenUndoFile(pos);
+                if (file)
+                {
+                    LOGA(
+                        "Pre-allocating up to position 0x%x in rev%05u.dat\n", nNewChunks * UNDOFILE_CHUNK_SIZE, pos.nFile);
+                    AllocateFileRange(file, pos.nPos, nNewChunks * UNDOFILE_CHUNK_SIZE - pos.nPos);
+                    fclose(file);
+                }
             }
         }
         else
