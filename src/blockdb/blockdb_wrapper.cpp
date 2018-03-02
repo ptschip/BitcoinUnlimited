@@ -125,6 +125,8 @@ bool WriteBlockToDisk(const CBlock &block, CDiskBlockPos &pos, const CMessageHea
     }
     else if(BLOCK_DB_MODE == LEVELDB_BLOCK_STORAGE)
     {
+        // we want to set nFile inside pos here to -1 so we know its in levelDB block storage, dont do this within dual most since it also uses sequential
+
     	return WriteBlockToDiskLevelDB(block);
     }
     else if(BLOCK_DB_MODE == LEVELDB_AND_SEQUENTIAL)
