@@ -13,7 +13,7 @@
 #include "addrman.h"
 #include "amount.h"
 #include "blockdb/blockdb_sequential.h"
-#include "blockdb/pruning.h"
+#include "blockdb/blockdb_wrapper.h"
 #include "chain.h"
 #include "chainparams.h"
 #include "checkpoints.h"
