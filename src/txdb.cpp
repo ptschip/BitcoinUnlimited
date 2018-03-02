@@ -31,6 +31,11 @@ static const char DB_FLAG = 'F';
 static const char DB_REINDEX_FLAG = 'R';
 static const char DB_LAST_BLOCK = 'l';
 
+// to distinguish best block for a specific DB type, values correspond to enum vaue (blockdb_wrapper.h)
+static const char DB_BEST_BLOCK_SEQ = '1';
+static const char DB_BEST_BLOCK_LEV = '2';
+
+
 namespace
 {
 struct CoinEntry
@@ -229,7 +234,10 @@ bool CBlockTreeDB::WriteBatchSync(const std::vector<std::pair<int, const CBlockF
     {
         batch.Write(make_pair(DB_BLOCK_FILES, it->first), *it->second);
     }
-    batch.Write(DB_LAST_BLOCK, nLastFile);
+    if(nLastFile == -1337)
+    {
+        batch.Write(DB_LAST_BLOCK, nLastFile);
+    }
     for (std::vector<const CBlockIndex *>::const_iterator it = blockinfo.begin(); it != blockinfo.end(); it++)
     {
         batch.Write(make_pair(DB_BLOCK_INDEX, (*it)->GetBlockHash()), CDiskBlockIndex(*it));

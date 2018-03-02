@@ -31,6 +31,8 @@ bool WriteBlockToDisk(const CBlock &block, CDiskBlockPos &pos, const CMessageHea
     }
     else if(BLOCK_DB_MODE == LEVELDB_BLOCK_STORAGE)
     {
+        // we want to set nFile inside pos here to -1 so we know its in levelDB block storage, dont do this within dual most since it also uses sequential
+
     	return WriteBlockToDiskLevelDB(block);
     }
     else if(BLOCK_DB_MODE == LEVELDB_AND_SEQUENTIAL)
@@ -126,7 +128,20 @@ void FindFilesToPrune(std::set<int> &setFilesToPrune, uint64_t nPruneAfterHeight
     }
     else if(BLOCK_DB_MODE == LEVELDB_BLOCK_STORAGE || BLOCK_DB_MODE == LEVELDB_AND_SEQUENTIAL)
     {
-    	FindFilesToPruneLevelDB(nLastBlockWeCanPrune);
+    	uint64_t amntPruned = FindFilesToPruneLevelDB(nLastBlockWeCanPrune);
+        // because we just prune the DB here and dont have a file set to return, we need to set prune triggers here
+        // otherwise they will check for the fileset and incorrectly never be set
+
+        // we do not need to set fFlushForPrune since we have "already flushed"
+
+        fCheckForPruning = false;
+        // if this is the first time we attempt to prune, dont set pruned = true if we didnt prune anything so we must check amntPruned here
+        if (!fHavePruned && amntPruned != 0)
+        {
+            pblocktree->WriteFlag("prunedblockfiles", true);
+            fHavePruned = true;
+        }
+
     }
 }
 
@@ -201,8 +216,11 @@ bool FlushStateToDisk(CValidationState &state, FlushStateMode mode)
             {
                 return state.Error("out of disk space");
             }
-            // First make sure all block and undo data is flushed to disk.
-            FlushBlockFile();
+            // First make sure all block and undo data is flushed to disk. This is not used for levelDB block storage
+            if(BLOCK_DB_MODE == SEQUENTIAL_BLOCK_FILES)
+            {
+                FlushBlockFile();
+            }
             // Then update all block file information (which may refer to block and undo files).
             {
                 std::vector<std::pair<int, const CBlockFileInfo *> > vFiles;
@@ -219,10 +237,33 @@ bool FlushStateToDisk(CValidationState &state, FlushStateMode mode)
                     vBlocks.push_back(*it);
                     setDirtyBlockIndex.erase(it++);
                 }
-                if (!pblocktree->WriteBatchSync(vFiles, nLastBlockFile, vBlocks))
+
+
+                // we write different info depending on block storage system
+                if(BLOCK_DB_MODE == SEQUENTIAL_BLOCK_FILES || BLOCK_DB_MODE == LEVELDB_AND_SEQUENTIAL)
                 {
-                    return AbortNode(state, "Files to write to block index database");
+                    if (!pblocktree->WriteBatchSync(vFiles, nLastBlockFile, vBlocks))
+                    {
+                        return AbortNode(state, "Files to write to block index database");
+                    }
                 }
+                else if(BLOCK_DB_MODE == LEVELDB_BLOCK_STORAGE || BLOCK_DB_MODE == LEVELDB_AND_SEQUENTIAL)
+                {
+                    // vFiles should be empty for a LEVELDB call so insert a blank vector instead
+                    std::vector<std::pair<int, const CBlockFileInfo *> > vFilesEmpty;
+                    // pass in -1 for the last block file since we dont use it for level, it will be ignored in the function if it is -1337
+                    if (!pblocktree->WriteBatchSync(vFilesEmpty, -1337, vBlocks))
+                    {
+                        return AbortNode(state, "Files to write to block index database");
+                    }
+                }
+                else
+                {
+                    // THIS SHOULD NEVER HAPPEN, it means we werent running in any recognizable block DB mode
+                    assert(false);
+                }
+
+
             }
             // Finally remove any pruned files
             if (fFlushForPrune)

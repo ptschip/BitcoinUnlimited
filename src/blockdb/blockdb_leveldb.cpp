@@ -64,7 +64,7 @@ bool ReadBlockFromDiskLevelDB(const CBlockIndex *pindex, BlockDBValue &value)
     return pblockfull->ReadBlock(pindex->GetBlockHash(), value);
 }
 
-void FindFilesToPruneLevelDB(uint64_t nLastBlockWeCanPrune)
+uint64_t FindFilesToPruneLevelDB(uint64_t nLastBlockWeCanPrune)
 {
     std::vector<uint256> hashesToPrune;
     /// just remove the to be pruned blocks here in the case of leveldb storage
@@ -89,7 +89,7 @@ void FindFilesToPruneLevelDB(uint64_t nLastBlockWeCanPrune)
             }
             else
             {
-                return; // error("FindFilesToPrune() : failed to read value");
+                return 0; // error("FindFilesToPrune() : failed to read value");
             }
         }
         else
@@ -102,4 +102,5 @@ void FindFilesToPruneLevelDB(uint64_t nLastBlockWeCanPrune)
     {
         pblockfull->EraseBlock(*iter);
     }
+    return hashesToPrune.size();
 }
