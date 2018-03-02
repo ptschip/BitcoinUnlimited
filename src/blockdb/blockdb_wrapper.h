@@ -16,8 +16,8 @@ enum FlushStateMode
 
 enum BlockDBMode
 {
-    SEQUENTIAL_BLOCK_FILES, //0 
-    LEVELDB_BLOCK_STORAGE, //1 
+    SEQUENTIAL_BLOCK_FILES, //0
+    LEVELDB_BLOCK_STORAGE, //1
     LEVELDB_AND_SEQUENTIAL // 2
 };
 
