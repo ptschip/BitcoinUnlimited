@@ -9,6 +9,7 @@
 #include "addrman.h"
 #include "arith_uint256.h"
 #include "blockdb/blockdb_sequential.h"
+#include "blockdb/blockdb_wrapper.h"
 #include "chainparams.h"
 #include "checkpoints.h"
 #include "checkqueue.h"
@@ -4235,7 +4236,7 @@ bool LoadExternalBlockFile(const CChainParams &chainparams, FILE *fileIn, CDiskB
                     while (range.first != range.second)
                     {
                         std::multimap<uint256, CDiskBlockPos>::iterator it = range.first;
-                        if (ReadBlockFromDisk(block, it->second, chainparams.GetConsensus()))
+                        if (ReadBlockFromDiskSequential(block, it->second, chainparams.GetConsensus()))
                         {
                             LOGA("%s: Processing out of order child %s of %s\n", __func__, block.GetHash().ToString(),
                                 head.ToString());

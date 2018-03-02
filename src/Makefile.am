@@ -99,7 +99,7 @@ BITCOIN_CORE_H = \
   banentry.h \
   blockdb/blockdb_leveldb.h \
   blockdb/blockdb_sequential.h \
-  blockdb/pruning.h \
+  blockdb/blockdb_wrapper.h \
   bitnodes.h \
   bloom.h \
   cashaddr.h \
@@ -214,7 +214,7 @@ libbitcoin_server_a_SOURCES = \
   bitnodes.cpp \
   blockdb/blockdb_leveldb.cpp \
   blockdb/blockdb_sequential.cpp \
-  blockdb/pruning.cpp \
+  blockdb/blockdb_wrapper.cpp \
   bloom.cpp \
   chain.cpp \
   checkpoints.cpp \
