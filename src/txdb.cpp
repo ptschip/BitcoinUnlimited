@@ -234,7 +234,7 @@ bool CBlockTreeDB::WriteBatchSync(const std::vector<std::pair<int, const CBlockF
     {
         batch.Write(make_pair(DB_BLOCK_FILES, it->first), *it->second);
     }
-    if(nLastFile == -1337)
+    if (nLastFile == -1337)
     {
         batch.Write(DB_LAST_BLOCK, nLastFile);
     }
