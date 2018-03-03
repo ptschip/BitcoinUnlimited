@@ -1751,7 +1751,7 @@ bool UndoWriteToDisk(const CBlockUndo &blockundo,
     const uint256 &hashBlock,
     const CMessageHeader::MessageStartChars &messageStart)
 {
-    if(BLOCK_DB_MODE != LEVELDB_BLOCK_STORAGE)
+    if (BLOCK_DB_MODE != LEVELDB_BLOCK_STORAGE)
     {
         // Open history file to append
         CAutoFile fileout(OpenUndoFile(pos), SER_DISK, CLIENT_VERSION);
@@ -1784,7 +1784,7 @@ bool UndoWriteToDisk(const CBlockUndo &blockundo,
 
 bool UndoReadFromDisk(CBlockUndo &blockundo, const CDiskBlockPos &pos, const uint256 &hashBlock)
 {
-    if(BLOCK_DB_MODE != LEVELDB_BLOCK_STORAGE)
+    if (BLOCK_DB_MODE != LEVELDB_BLOCK_STORAGE)
     {
         // Open history file to read
         CAutoFile filein(OpenUndoFile(pos, true), SER_DISK, CLIENT_VERSION);
@@ -2462,9 +2462,10 @@ bool ConnectBlock(const CBlock &block,
         if (pindex->GetUndoPos().IsNull())
         {
             CDiskBlockPos pos;
-            if(BLOCK_DB_MODE == SEQUENTIAL_BLOCK_FILES || BLOCK_DB_MODE == LEVELDB_AND_SEQUENTIAL)
+            if (BLOCK_DB_MODE == SEQUENTIAL_BLOCK_FILES || BLOCK_DB_MODE == LEVELDB_AND_SEQUENTIAL)
             {
-                if (!FindUndoPos(state, pindex->nFile, pos, ::GetSerializeSize(blockundo, SER_DISK, CLIENT_VERSION) + 40))
+                if (!FindUndoPos(
+                        state, pindex->nFile, pos, ::GetSerializeSize(blockundo, SER_DISK, CLIENT_VERSION) + 40))
                 {
                     return error("ConnectBlock(): FindUndoPos failed");
                 }
@@ -3501,7 +3502,6 @@ bool FindBlockPos(CValidationState &state,
                 fCheckForPruning = true;
             if (CheckDiskSpace(nNewChunks * BLOCKFILE_CHUNK_SIZE - pos.nPos))
             {
-                
                 FILE *file = OpenBlockFile(pos);
                 if (file)
                 {
@@ -3510,7 +3510,6 @@ bool FindBlockPos(CValidationState &state,
                     AllocateFileRange(file, pos.nPos, nNewChunks * BLOCKFILE_CHUNK_SIZE - pos.nPos);
                     fclose(file);
                 }
-                
             }
             else
                 return state.Error("out of disk space");
@@ -3898,7 +3897,7 @@ static bool AcceptBlock(const CBlock &block,
         {
             blockPos = *dbp;
         }
-        if(BLOCK_DB_MODE == SEQUENTIAL_BLOCK_FILES || BLOCK_DB_MODE == LEVELDB_AND_SEQUENTIAL)
+        if (BLOCK_DB_MODE == SEQUENTIAL_BLOCK_FILES || BLOCK_DB_MODE == LEVELDB_AND_SEQUENTIAL)
         {
             if (!FindBlockPos(state, blockPos, nBlockSize + 8, nHeight, block.GetBlockTime(), dbp != NULL))
             {
@@ -4092,16 +4091,6 @@ bool TestBlockValidity(CValidationState &state,
 
     return true;
 }
-
-
-
-
-
-
-
-
-
-
 
 
 bool CheckDiskSpace(uint64_t nAdditionalBytes)
@@ -4447,7 +4436,7 @@ bool InitBlockIndex(const CChainParams &chainparams)
             unsigned int nBlockSize = ::GetSerializeSize(block, SER_DISK, CLIENT_VERSION);
             CDiskBlockPos blockPos;
             CValidationState state;
-            if(BLOCK_DB_MODE == SEQUENTIAL_BLOCK_FILES || BLOCK_DB_MODE == LEVELDB_AND_SEQUENTIAL)
+            if (BLOCK_DB_MODE == SEQUENTIAL_BLOCK_FILES || BLOCK_DB_MODE == LEVELDB_AND_SEQUENTIAL)
             {
                 if (!FindBlockPos(state, blockPos, nBlockSize + 8, 0, block.GetBlockTime()))
                 {
