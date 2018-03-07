@@ -942,6 +942,13 @@ bool AppInit2(Config &config, boost::thread_group &threadGroup, CScheduler &sche
     // ********************************************************* Step 6: load block chain
 
     fReindex = GetBoolArg("-reindex", DEFAULT_REINDEX);
+    BLOCK_DB_MODE = GetArg("-blockdbtype", DEFAULT_BLOCK_DB_MODE);
+
+    // if invalid param, set to default setting
+    if(BLOCK_DB_MODE > 2 || BLOCK_DB_MODE < 0)
+    {
+        BLOCK_DB_MODE = DEFAULT_BLOCK_DB_MODE;
+    }
 
     // Upgrading to 0.8; hard-link the old blknnnn.dat files into /blocks/
     fs::path blocksDir = GetDataDir() / "blocks";
