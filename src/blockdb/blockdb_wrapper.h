@@ -21,6 +21,9 @@ enum BlockDBMode
     LEVELDB_AND_SEQUENTIAL
 };
 
+extern BlockDBMode DEFAULT_BLOCK_DB_MODE;
+extern BlockDBMode BLOCK_DB_MODE;
+
 /** Functions for disk access for blocks */
 bool WriteBlockToDisk(const CBlock &block, CDiskBlockPos &pos, const CMessageHeader::MessageStartChars &messageStart);
 bool ReadBlockFromDisk(CBlock &block, const CBlockIndex *pindex, const Consensus::Params &consensusParams);
