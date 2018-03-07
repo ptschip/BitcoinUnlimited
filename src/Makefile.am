@@ -126,6 +126,7 @@ BITCOIN_CORE_H = \
   expedited.h \
   fs.h \
   graphene.h \
+  graphene_set.h \
   dstencode.h \
   httprpc.h \
   httpserver.h \
