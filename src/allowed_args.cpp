@@ -232,7 +232,7 @@ static void addGeneralOptions(AllowedArgs &allowedArgs, HelpMessageMode mode)
         .addDebugArg("blocksonly", optionalBool,
             strprintf(_("Whether to operate in a blocks only mode (default: %u)"), DEFAULT_BLOCKSONLY))
         .addArg("blockdbtype=<n>", requiredInt,
-            strprintf(_("Which method to store blocks on disk (default: %u) 1 = sequential files, 2 = leveldb, 3 = both")), DEFAULT_BLOCK_DB_MODE)
+            strprintf(_("Which method to store blocks on disk (default: %u) 0 = sequential files, 1 = leveldb, 2 = both"), DEFAULT_BLOCK_DB_MODE))
         .addArg("checkblocks=<n>", requiredInt,
             strprintf(_("How many blocks to check at startup (default: %u, 0 = all)"), DEFAULT_CHECKBLOCKS))
         .addArg("checklevel=<n>", requiredInt,

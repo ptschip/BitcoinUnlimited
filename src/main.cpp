@@ -1446,8 +1446,6 @@ bool CheckInputs(const CTransaction &tx,
     return true;
 }
 
-namespace
-{
 bool UndoWriteToDisk(const CBlockUndo &blockundo,
     CDiskBlockPos &pos,
     const uint256 &hashBlock,
@@ -1517,7 +1515,6 @@ bool UndoReadFromDisk(CBlockUndo &blockundo, const CDiskBlockPos &pos, const uin
     }
     return true;
 }
-} // anon namespace
 
 /** Abort with a message */
 bool AbortNode(const std::string &strMessage, const std::string &userMessage = "")
@@ -1947,7 +1944,7 @@ bool ConnectBlock(const CBlock &block,
     CAmount nFees = 0;
     int nInputs = 0;
     unsigned int nSigOps = 0;
-    CDiskTxPos pos(pindex->GetBlockPos(), GetSizeOfCompactSize(block.vtx.size()));
+    CDiskTxPos pos(pindex->GetBlockPos(BLOCK_DB_MODE == LEVELDB_BLOCK_STORAGE), GetSizeOfCompactSize(block.vtx.size()));
     std::vector<std::pair<uint256, CDiskTxPos> > vPos;
     vPos.reserve(block.vtx.size());
     blockundo.vtxundo.reserve(block.vtx.size() - 1);
@@ -3098,6 +3095,7 @@ bool ReceivedBlockTransactions(const CBlock &block,
     pindexNew->nDataPos = pos.nPos;
     pindexNew->nUndoPos = 0;
     pindexNew->nStatus |= BLOCK_HAVE_DATA;
+
     if (block.fExcessive)
     {
         pindexNew->nStatus |= BLOCK_EXCESSIVE;
@@ -3201,16 +3199,22 @@ bool FindBlockPos(CValidationState &state,
         if (nNewChunks > nOldChunks)
         {
             if (fPruneMode)
+            {
                 fCheckForPruning = true;
+            }
             if (CheckDiskSpace(nNewChunks * BLOCKFILE_CHUNK_SIZE - pos.nPos))
             {
-                FILE *file = OpenBlockFile(pos);
-                if (file)
+                /// dont actually open and allocate file space if we are running levelDB
+                if(BLOCK_DB_MODE != LEVELDB_BLOCK_STORAGE)
                 {
-                    LOGA("Pre-allocating up to position 0x%x in blk%05u.dat\n", nNewChunks * BLOCKFILE_CHUNK_SIZE,
-                        pos.nFile);
-                    AllocateFileRange(file, pos.nPos, nNewChunks * BLOCKFILE_CHUNK_SIZE - pos.nPos);
-                    fclose(file);
+                    FILE *file = OpenBlockFile(pos);
+                    if (file)
+                    {
+                        LOGA("Pre-allocating up to position 0x%x in blk%05u.dat\n", nNewChunks * BLOCKFILE_CHUNK_SIZE,
+                            pos.nFile);
+                        AllocateFileRange(file, pos.nPos, nNewChunks * BLOCKFILE_CHUNK_SIZE - pos.nPos);
+                        fclose(file);
+                    }
                 }
             }
             else
@@ -3599,12 +3603,9 @@ static bool AcceptBlock(const CBlock &block,
         {
             blockPos = *dbp;
         }
-        if (BLOCK_DB_MODE == SEQUENTIAL_BLOCK_FILES || BLOCK_DB_MODE == LEVELDB_AND_SEQUENTIAL)
+        if (!FindBlockPos(state, blockPos, nBlockSize + 8, nHeight, block.GetBlockTime(), dbp != NULL))
         {
-            if (!FindBlockPos(state, blockPos, nBlockSize + 8, nHeight, block.GetBlockTime(), dbp != NULL))
-            {
-                return error("AcceptBlock(): FindBlockPos failed");
-            }
+            return error("AcceptBlock(): FindBlockPos failed");
         }
         if (dbp == NULL)
         {
@@ -3831,7 +3832,9 @@ bool static LoadBlockIndexDB()
 {
     const CChainParams &chainparams = Params();
     if (!pblocktree->LoadBlockIndexGuts())
+    {
         return false;
+    }
 
     boost::this_thread::interruption_point();
 
@@ -3888,43 +3891,50 @@ bool static LoadBlockIndexDB()
             (pindexBestHeader == nullptr || CBlockIndexWorkComparator()(pindexBestHeader, pindex)))
             pindexBestHeader = pindex;
     }
-
-    // Check presence of blk files
-    LOGA("Checking all blk files are present...\n");
-    for (std::set<int>::iterator it = setBlkDataFiles.begin(); it != setBlkDataFiles.end(); it++)
+    
+    if(BLOCK_DB_MODE != LEVELDB_BLOCK_STORAGE)
     {
-        CDiskBlockPos pos(*it, 0);
-        fs::path path = GetBlockPosFilename(pos, "blk");
-        if (!fs::exists(path))
-            return false;
-    }
-
-    // Load block file info
-    pblocktree->ReadLastBlockFile(nLastBlockFile);
-    vinfoBlockFile.resize(nLastBlockFile + 1);
-    LOGA("%s: last block file = %i\n", __func__, nLastBlockFile);
-    for (int nFile = 0; nFile <= nLastBlockFile; nFile++)
-    {
-        pblocktree->ReadBlockFileInfo(nFile, vinfoBlockFile[nFile]);
-    }
-    LOGA("%s: last block file info: %s\n", __func__, vinfoBlockFile[nLastBlockFile].ToString());
-    for (int nFile = nLastBlockFile + 1; true; nFile++)
-    {
-        CBlockFileInfo info;
-        if (pblocktree->ReadBlockFileInfo(nFile, info))
+        // Check presence of blk files
+        
+        LOGA("Checking all blk files are present...\n");
+        for (std::set<int>::iterator it = setBlkDataFiles.begin(); it != setBlkDataFiles.end(); it++)
         {
-            vinfoBlockFile.push_back(info);
+            CDiskBlockPos pos(*it, 0);
+            fs::path path = GetBlockPosFilename(pos, "blk");
+            if (!fs::exists(path))
+            {
+                return false;
+            }
         }
-        else
+            // Load block file info
+        pblocktree->ReadLastBlockFile(nLastBlockFile);
+        vinfoBlockFile.resize(nLastBlockFile + 1);
+        LOGA("%s: last block file = %i\n", __func__, nLastBlockFile);
+        for (int nFile = 0; nFile <= nLastBlockFile; nFile++)
         {
-            break;
+            pblocktree->ReadBlockFileInfo(nFile, vinfoBlockFile[nFile]);
+        }
+        LOGA("%s: last block file info: %s\n", __func__, vinfoBlockFile[nLastBlockFile].ToString());
+        for (int nFile = nLastBlockFile + 1; true; nFile++)
+        {
+            CBlockFileInfo info;
+            if (pblocktree->ReadBlockFileInfo(nFile, info))
+            {
+                vinfoBlockFile.push_back(info);
+            }
+            else
+            {
+                break;
+            }
         }
     }
 
     // Check whether we have ever pruned block & undo files
     pblocktree->ReadFlag("prunedblockfiles", fHavePruned);
     if (fHavePruned)
+    {
         LOGA("LoadBlockIndexDB(): Block files have previously been pruned\n");
+    }
 
     // Check whether we need to continue reindexing
     bool fReindexing = false;
@@ -3938,7 +3948,9 @@ bool static LoadBlockIndexDB()
     // Load pointer to end of best chain
     BlockMap::iterator it = mapBlockIndex.find(pcoinsTip->GetBestBlock());
     if (it == mapBlockIndex.end())
+    {
         return true;
+    }
     chainActive.SetTip(it->second);
 
     PruneBlockIndexCandidates();
@@ -4138,12 +4150,9 @@ bool InitBlockIndex(const CChainParams &chainparams)
             unsigned int nBlockSize = ::GetSerializeSize(block, SER_DISK, CLIENT_VERSION);
             CDiskBlockPos blockPos;
             CValidationState state;
-            if (BLOCK_DB_MODE == SEQUENTIAL_BLOCK_FILES || BLOCK_DB_MODE == LEVELDB_AND_SEQUENTIAL)
+            if (!FindBlockPos(state, blockPos, nBlockSize + 8, 0, block.GetBlockTime()))
             {
-                if (!FindBlockPos(state, blockPos, nBlockSize + 8, 0, block.GetBlockTime()))
-                {
-                    return error("LoadBlockIndex(): FindBlockPos failed");
-                }
+                return error("LoadBlockIndex(): FindBlockPos failed");
             }
             if (!WriteBlockToDisk(block, blockPos, chainparams.MessageStart()))
             {
