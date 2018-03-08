@@ -97,7 +97,7 @@ void SyncDBForDualMode(const CChainParams &chainparams)
         }
         CBlock block_seq;
         //printf("opening for hash %s \n", iter->second->GetBlockHash().GetHex().c_str());
-        if(!ReadBlockFromDiskSequential(block_seq, iter->second->GetBlockPos(BLOCK_DB_MODE == LEVELDB_BLOCK_STORAGE), chainparams.GetConsensus()))
+        if(!ReadBlockFromDiskSequential(block_seq, iter->second->GetBlockPos(), chainparams.GetConsensus()))
         {
             //printf("FAILED for hash %s \n", iter->second->GetBlockHash().GetHex().c_str());
             fails++;
@@ -109,9 +109,11 @@ void SyncDBForDualMode(const CChainParams &chainparams)
         }
         WriteBlockToDiskLevelDB(block_seq);
         hashesChecked.insert(iter->second->GetBlockHash());
-        
-        printf("number of blocks read and added successfully %d \n", success);
-        printf("number of blocks failed %d \n", fails);
+    }
+    if(fDebug)
+    {
+        LOGA("number of blocks read and added successfully %d \n", success);
+        LOGA("number of blocks failed %d \n", fails);
     }
 }
 
@@ -140,13 +142,13 @@ bool ReadBlockFromDisk(CBlock &block, const CBlockIndex *pindex, const Consensus
 {
     if(BLOCK_DB_MODE == SEQUENTIAL_BLOCK_FILES)
     {
-        if (!ReadBlockFromDiskSequential(block, pindex->GetBlockPos(BLOCK_DB_MODE == LEVELDB_BLOCK_STORAGE), consensusParams))
+        if (!ReadBlockFromDiskSequential(block, pindex->GetBlockPos(), consensusParams))
         {
             return false;
         }
         if (block.GetHash() != pindex->GetBlockHash())
         {
-            return error("ReadBlockFromDisk(CBlock&, CBlockIndex*): GetHash() doesn't match index for %s at %s", pindex->ToString(), pindex->GetBlockPos(BLOCK_DB_MODE == LEVELDB_BLOCK_STORAGE).ToString());
+            return error("ReadBlockFromDisk(CBlock&, CBlockIndex*): GetHash() doesn't match index for %s at %s", pindex->ToString(), pindex->GetBlockPos().ToString());
         }
     }
     else if (BLOCK_DB_MODE == LEVELDB_BLOCK_STORAGE)
@@ -160,7 +162,7 @@ bool ReadBlockFromDisk(CBlock &block, const CBlockIndex *pindex, const Consensus
         block = value.block;
         if(block.GetHash() != pindex->GetBlockHash())
         {
-            return error("ReadBlockFromDisk(CBlock&, CBlockIndex*): GetHash() doesn't match index for %s at %s", pindex->ToString(), pindex->GetBlockPos(BLOCK_DB_MODE == LEVELDB_BLOCK_STORAGE).ToString());
+            return error("ReadBlockFromDisk(CBlock&, CBlockIndex*): GetHash() doesn't match index for %s at %s", pindex->ToString(), pindex->GetBlockPos().ToString());
         }
     }
     else if (BLOCK_DB_MODE == LEVELDB_AND_SEQUENTIAL)
@@ -169,7 +171,7 @@ bool ReadBlockFromDisk(CBlock &block, const CBlockIndex *pindex, const Consensus
     	CBlock blockLev;
     	BlockDBValue value;
         /// run both to verify both databases match, we will only return
-        if (!ReadBlockFromDiskSequential(blockSeq, pindex->GetBlockPos(BLOCK_DB_MODE == LEVELDB_BLOCK_STORAGE), consensusParams))
+        if (!ReadBlockFromDiskSequential(blockSeq, pindex->GetBlockPos(), consensusParams))
         {
             return false;
         }
@@ -181,11 +183,11 @@ bool ReadBlockFromDisk(CBlock &block, const CBlockIndex *pindex, const Consensus
         blockLev = value.block;
         if(blockSeq.GetHash() != pindex->GetBlockHash())
         {
-            return error("ReadBlockFromDisk(CBlock&, CBlockIndex*): GetHash() doesn't match index for %s at %s", pindex->ToString(), pindex->GetBlockPos(BLOCK_DB_MODE == LEVELDB_BLOCK_STORAGE).ToString());
+            return error("ReadBlockFromDisk(CBlock&, CBlockIndex*): GetHash() doesn't match index for %s at %s", pindex->ToString(), pindex->GetBlockPos().ToString());
         }
         if(blockLev.GetHash() != pindex->GetBlockHash())
         {
-            return error("ReadBlockFromDisk(CBlock&, CBlockIndex*): GetHash() doesn't match index for %s at %s", pindex->ToString(), pindex->GetBlockPos(BLOCK_DB_MODE == LEVELDB_BLOCK_STORAGE).ToString());
+            return error("ReadBlockFromDisk(CBlock&, CBlockIndex*): GetHash() doesn't match index for %s at %s", pindex->ToString(), pindex->GetBlockPos().ToString());
         }
         if(blockSeq.GetHash() != blockLev.GetHash())
         {
