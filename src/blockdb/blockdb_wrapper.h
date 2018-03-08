@@ -16,17 +16,21 @@ enum FlushStateMode
 
 enum BlockDBMode
 {
-    SEQUENTIAL_BLOCK_FILES,
-    LEVELDB_BLOCK_STORAGE,
-    LEVELDB_AND_SEQUENTIAL
+    SEQUENTIAL_BLOCK_FILES, //0 
+    LEVELDB_BLOCK_STORAGE, //1 
+    LEVELDB_AND_SEQUENTIAL // 2
 };
 
-extern BlockDBMode DEFAULT_BLOCK_DB_MODE;
+static const BlockDBMode DEFAULT_BLOCK_DB_MODE = LEVELDB_BLOCK_STORAGE;
 extern BlockDBMode BLOCK_DB_MODE;
 
+/** Catch leveldb up with sequential block files */
+void SyncDBForDualMode(const CChainParams &chainparams);
+
 /** Functions for disk access for blocks */
-bool WriteBlockToDisk(const CBlock &block, CDiskBlockPos &pos, const CMessageHeader::MessageStartChars &messageStart);
 bool ReadBlockFromDisk(CBlock &block, const CBlockIndex *pindex, const Consensus::Params &consensusParams);
+bool WriteBlockToDisk(const CBlock &block, CDiskBlockPos &pos, const CMessageHeader::MessageStartChars &messageStart);
+
 
 /**
  * Prune block and undo files (blk???.dat and undo???.dat) so that the disk space used is less than a user-defined
