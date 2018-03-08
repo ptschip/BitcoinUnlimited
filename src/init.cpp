@@ -942,43 +942,59 @@ bool AppInit2(Config &config, boost::thread_group &threadGroup, CScheduler &sche
     // ********************************************************* Step 6: load block chain
 
     fReindex = GetBoolArg("-reindex", DEFAULT_REINDEX);
-    BLOCK_DB_MODE = GetArg("-blockdbtype", DEFAULT_BLOCK_DB_MODE);
-
-    // if invalid param, set to default setting
-    if(BLOCK_DB_MODE > 2 || BLOCK_DB_MODE < 0)
+    int64_t requested_block_mode = GetArg("-blockdbtype", 1);
+    // if invalid param, set to default setting,
+    if(requested_block_mode > 2 || requested_block_mode < 0)
     {
         BLOCK_DB_MODE = DEFAULT_BLOCK_DB_MODE;
     }
+    /// TODO : this is not the way we want to do this, but it is fine for now
+    if(requested_block_mode == 0)
+    {
+        BLOCK_DB_MODE = SEQUENTIAL_BLOCK_FILES;
+    }
+    else if(requested_block_mode == 1)
+    {
+        BLOCK_DB_MODE = LEVELDB_BLOCK_STORAGE;
+    }
+    else if(requested_block_mode == 2)
+    {
+        BLOCK_DB_MODE = LEVELDB_AND_SEQUENTIAL;
+    }
+
 
     // Upgrading to 0.8; hard-link the old blknnnn.dat files into /blocks/
-    fs::path blocksDir = GetDataDir() / "blocks";
-    if (!fs::exists(blocksDir))
+    if(BLOCK_DB_MODE != LEVELDB_BLOCK_STORAGE)
     {
-        fs::create_directories(blocksDir);
-        bool linked = false;
-        for (unsigned int i = 1; i < 10000; i++)
+        fs::path blocksDir = GetDataDir() / "blocks";
+        if (!fs::exists(blocksDir))
         {
-            fs::path source = GetDataDir() / strprintf("blk%04u.dat", i);
-            if (!fs::exists(source))
-                break;
-            fs::path dest = blocksDir / strprintf("blk%05u.dat", i - 1);
-            try
+            fs::create_directories(blocksDir);
+            bool linked = false;
+            for (unsigned int i = 1; i < 10000; i++)
             {
-                fs::create_hard_link(source, dest);
-                LOGA("Hardlinked %s -> %s\n", source.string(), dest.string());
-                linked = true;
-            }
-            catch (const fs::filesystem_error &e)
-            {
+                fs::path source = GetDataDir() / strprintf("blk%04u.dat", i);
+                if (!fs::exists(source))
+                    break;
+                fs::path dest = blocksDir / strprintf("blk%05u.dat", i - 1);
+                try
+                {
+                    fs::create_hard_link(source, dest);
+                    LOGA("Hardlinked %s -> %s\n", source.string(), dest.string());
+                    linked = true;
+                }
+                catch (const fs::filesystem_error &e)
+                {
                 // Note: hardlink creation failing is not a disaster, it just means
                 // blocks will get re-downloaded from peers.
-                LOGA("Error hardlinking blk%04u.dat: %s\n", i, e.what());
-                break;
+                    LOGA("Error hardlinking blk%04u.dat: %s\n", i, e.what());
+                    break;
+                }
             }
-        }
-        if (linked)
-        {
-            fReindex = true;
+            if (linked)
+            {
+                fReindex = true;
+            }
         }
     }
 
@@ -1089,7 +1105,12 @@ bool AppInit2(Config &config, boost::thread_group &threadGroup, CScheduler &sche
                         break;
                     }
                 }
-
+                // run a db sync here to catch leveldb up to sequential files incase we were 
+                // running in sequential before and just changed to leveldb
+                if(BLOCK_DB_MODE == LEVELDB_BLOCK_STORAGE)
+                {
+                    SyncDBForDualMode(chainparams);
+                }
                 if (!CVerifyDB().VerifyDB(chainparams, pcoinsdbview, GetArg("-checklevel", DEFAULT_CHECKLEVEL),
                         GetArg("-checkblocks", DEFAULT_CHECKBLOCKS)))
                 {
