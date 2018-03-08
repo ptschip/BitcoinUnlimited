@@ -234,10 +234,10 @@ public:
         nNonce = block.nNonce;
     }
 
-    CDiskBlockPos GetBlockPos() const
+    CDiskBlockPos GetBlockPos(bool leveldb) const
     {
         CDiskBlockPos ret;
-        if (nStatus & BLOCK_HAVE_DATA)
+        if ((nStatus & BLOCK_HAVE_DATA) || leveldb)
         {
             ret.nFile = nFile;
             ret.nPos = nDataPos;
