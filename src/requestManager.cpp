@@ -588,14 +588,13 @@ void CRequestManager::ResetLastBlockRequestTime(const uint256 &hash)
     }
 }
 
-void CRequestManager::SendRequests()
+void CRequestManager::SendRequests(CNode *pnode)
 {
     int64_t now = 0;
 
     // TODO: if a node goes offline, rerequest txns from someone else and cleanup references right away
     LOCK(cs_objDownloader);
-    if (sendBlkIter == mapBlkInfo.end())
-        sendBlkIter = mapBlkInfo.begin();
+    sendBlkIter = mapBlkInfo.begin();
 
     // Modify retry interval. If we're doing IBD or if Traffic Shaping is ON we want to have a longer interval because
     // those blocks and txns can take much longer to download.
@@ -659,7 +658,7 @@ void CRequestManager::SendRequests()
                     }
                 }
 
-                if (next.node != nullptr)
+                if (next.node != nullptr && next.node == pnode)
                 {
                     // If item.lastRequestTime is true then we've requested at least once and we'll try a re-request
                     if (item.lastRequestTime)
@@ -772,8 +771,7 @@ void CRequestManager::SendRequests()
     }
 
     // Get Transactions
-    if (sendIter == mapTxnInfo.end())
-        sendIter = mapTxnInfo.begin();
+    sendIter = mapTxnInfo.begin();
     while ((sendIter != mapTxnInfo.end()) && requestPacer.try_leak(1))
     {
         now = GetTimeMicros();
@@ -830,7 +828,7 @@ void CRequestManager::SendRequests()
                         }
                     }
 
-                    if (next.node != nullptr)
+                    if (next.node != nullptr && next.node == pnode)
                     {
                         // This commented code skips requesting TX if the node is not synced. The request
                         // manager should not make this decision but rather the caller should not give us the TX.
