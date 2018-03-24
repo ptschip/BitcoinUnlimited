@@ -2168,12 +2168,10 @@ void ThreadMessageHandler()
             // and all other requests into the send queue.
             g_signals.SendMessages(pnode);
 
+            // From the request manager, make requests for transactions and blocks.
+            requester.SendRequests(pnode);
             boost::this_thread::interruption_point();
         }
-
-        // From the request manager, make requests for transactions and blocks. We do this before potentially
-        // sleeping in the step below so as to allow requests to return during the sleep time.
-        requester.SendRequests();
 
         // A cs_vNodes lock is not required here when releasing refs for two reasons: one, this only decrements
         // an atomic counter, and two, the counter will always be > 0 at this point, so we don't have to worry
