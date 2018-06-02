@@ -2117,9 +2117,9 @@ bool ConnectBlock(const CBlock &block,
 
 
     // Write undo information to disk
-    if (BLOCK_DB_MODE == SEQUENTIAL_BLOCK_FILES || BLOCK_DB_MODE == LEVELDB_AND_SEQUENTIAL)
+    if (pindex->GetUndoPos().IsNull() || !pindex->IsValid(BLOCK_VALID_SCRIPTS))
     {
-        if (pindex->GetUndoPos().IsNull() || !pindex->IsValid(BLOCK_VALID_SCRIPTS))
+        if (BLOCK_DB_MODE == SEQUENTIAL_BLOCK_FILES || BLOCK_DB_MODE == LEVELDB_AND_SEQUENTIAL)
         {
             if (pindex->GetUndoPos().IsNull())
             {
