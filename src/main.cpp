@@ -212,8 +212,6 @@ std::unique_ptr<CRollingBloomFilter> txn_recently_in_block GUARDED_BY(cs_recentR
 /** Number of preferable block download peers. */
 std::atomic<int> nPreferredDownload{0};
 
-/** Number of peers from which we're downloading blocks. */
-int nPeersWithValidatedDownloads = 0;
 } // anon namespace
 
 /** All pairs A->B, where A (or one of its ancestors) misses transactions, but B has transactions.
@@ -229,23 +227,6 @@ bool fCheckForPruning = false;
 
 /** Dirty block file entries. */
 std::set<int> setDirtyFileInfo GUARDED_BY(cs_main);
-
-std::vector<CBlockFileInfo> vinfoBlockFile;
-int nLastBlockFile = 0;
-
-/** All pairs A->B, where A (or one of its ancestors) misses transactions, but B has transactions.
- * Pruned nodes may have entries where B is missing data.
- */
-std::multimap<CBlockIndex *, CBlockIndex *> mapBlocksUnlinked;
-
-/** Global flag to indicate we should check to see if there are
- *  block/undo files that should be deleted.  Set on startup
- *  or if we allocate more file space when we're in prune mode
- */
-bool fCheckForPruning = false;
-
-/** Dirty block file entries. */
-std::set<int> setDirtyFileInfo;
 
 std::vector<CBlockFileInfo> vinfoBlockFile;
 int nLastBlockFile = 0;
@@ -4161,7 +4142,6 @@ bool InitBlockIndex(const CChainParams &chainparams)
     // Check whether we're already initialized
     if (chainActive.Genesis() != nullptr)
         return true;
-    }
 
     // Use the provided setting for -txindex in the new database
     fTxIndex = GetBoolArg("-txindex", DEFAULT_TXINDEX);
