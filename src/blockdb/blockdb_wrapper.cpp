@@ -25,95 +25,27 @@ BlockDBMode BLOCK_DB_MODE = DEFAULT_BLOCK_DB_MODE;
 
 
 // use this sparingly, this function will be very disk intensive
-void SyncDBForDualMode(const CChainParams &chainparams)
 {
-
-    // when searching for blocks in the second DB, skip blocks we already verified are correct
-    // use set not a vector since a set cannot contain a duplicate entry and a vector can
-    std::set<uint256> hashesChecked;
-
-/*
-    boost::scoped_ptr<CDBIterator> pcursor(pblockfull->NewIterator());
-    pcursor->Seek(uint256());
-    // Load mapBlockIndex
-    while (pcursor->Valid())
     {
-        boost::this_thread::interruption_point();
-        uint256 key;
-        /// TODO : might not need this GetKey
-        if (pcursor->GetKey(key))
         {
             BlockDBValue blockValue;
-            if (pcursor->GetValue(blockValue))
             {
-                CBlock block_lev = blockValue.block;
-                uint256 checkBlockHash = block_lev.GetHash();
-
-                // TODO : there is a better way to do this, just do this for testing
-                BlockMap::iterator it;
-                it = mapBlockIndex.find(checkBlockHash);
-                if(it == mapBlockIndex.end())
                 {
-                    // need to add block to sequential files here.
-
-                    // adding blocks here is out of specifications due to difficulty of rearranging the block files since
-                    // they are in sequential order. this might cause problems or make dual mode not possible
                 }
-                else
                 {
-                    // we have the block written, so do hash check to make sure they are the same
-                    CBlock block_seq;
-                    if(!ReadBlockFromDiskSequential(block_seq, it->second->GetBlockPos(), Params().GetConsensus()))
-                    {
-                        // something is very wrong
-                        assert(false);
-                    }
-                    if(block_seq.GetHash() != checkBlockHash)
-                    {
-                        // this should never happen
-                        assert(false);
-                    }
                 }
-                hashesChecked.insert(checkBlockHash);
             }
         }
     }
-    // TODO : might need to delete the pcursor here
-*/
-    // now search through the sequential files for any hashes not in hashes checked to sync with leveldb
-    BlockMap::iterator iter;
-    int success = 0;
-    int fails = 0;
-    for(iter = mapBlockIndex.begin(); iter != mapBlockIndex.end(); iter++)
     {
-        // we dont want to redo blocks we already checked
-        if(hashesChecked.count(iter->second->GetBlockHash()) != 0)
         {
-            continue;
         }
-        if(iter->second->GetBlockHash() == chainparams.GetConsensus().hashGenesisBlock)
         {
-            continue;
         }
-        CBlock block_seq;
-        //printf("opening for hash %s \n", iter->second->GetBlockHash().GetHex().c_str());
-        if(!ReadBlockFromDiskSequential(block_seq, iter->second->GetBlockPos(), chainparams.GetConsensus()))
         {
-            //printf("FAILED for hash %s \n", iter->second->GetBlockHash().GetHex().c_str());
-            fails++;
-            continue;
         }
-        else
         {
-            success++;
         }
-        WriteBlockToDiskLevelDB(block_seq);
-        hashesChecked.insert(iter->second->GetBlockHash());
-    }
-    if(fDebug)
-    {
-        LOGA("number of blocks read and added successfully %d \n", success);
-        LOGA("number of blocks failed %d \n", fails);
     }
 }
 
