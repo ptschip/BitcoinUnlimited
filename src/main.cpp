@@ -3691,6 +3691,12 @@ bool ProcessNewBlock(CValidationState &state,
             return false;
     }
 
+    // if we arent set to sequential, update the best block using the tip for leveldb storage after activating it
+    if(BLOCK_DB_MODE != SEQUENTIAL_BLOCK_FILES)
+    {
+        pcoinsdbview->WriteBestBlockDb(chainActive.Tip()->GetBlockHash());
+    }
+
     int64_t end = GetTimeMicros();
 
     if (Logging::LogAcceptCategory(Logging::BENCH))
