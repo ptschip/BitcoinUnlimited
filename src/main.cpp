@@ -1393,7 +1393,7 @@ bool UndoWriteToDisk(const CBlockUndo &blockundo,
     const CMessageHeader::MessageStartChars &messageStart)
 {
     // No need for writing undo to disk of we are only using leveldb for block storage.
-    if (BLOCK_DB_MODE == LEVELDB_BLOCK_STORAGE)
+    if (BLOCK_DB_MODE == DB_BLOCK_STORAGE)
         return true;
 
     // Open history file to append
@@ -1428,7 +1428,7 @@ bool UndoWriteToDisk(const CBlockUndo &blockundo,
 bool UndoReadFromDisk(CBlockUndo &blockundo, const CDiskBlockPos &pos, const uint256 &hashBlock)
 {
     // No need for reading undo from disk of we are only using leveldb for block storage.
-    if (BLOCK_DB_MODE == LEVELDB_BLOCK_STORAGE)
+    if (BLOCK_DB_MODE == DB_BLOCK_STORAGE)
         return true;
 
     // Open history file to read
@@ -2128,7 +2128,7 @@ bool ConnectBlock(const CBlock &block,
     // Write undo information to disk
     if (pindex->GetUndoPos().IsNull() || !pindex->IsValid(BLOCK_VALID_SCRIPTS))
     {
-        if (BLOCK_DB_MODE == SEQUENTIAL_BLOCK_FILES || BLOCK_DB_MODE == LEVELDB_AND_SEQUENTIAL)
+        if (BLOCK_DB_MODE == SEQUENTIAL_BLOCK_FILES || BLOCK_DB_MODE == HYBRID_STORAGE)
         {
             if (pindex->GetUndoPos().IsNull())
             {
@@ -3162,7 +3162,7 @@ bool FindBlockPos(CValidationState &state,
     bool fKnown = false)
 {
     // No need for finding block pos if we're only using leveldb for block storage.
-    if (BLOCK_DB_MODE == LEVELDB_BLOCK_STORAGE)
+    if (BLOCK_DB_MODE == DB_BLOCK_STORAGE)
         return true;
 
     LOCK(cs_LastBlockFile);
@@ -3889,7 +3889,7 @@ bool static LoadBlockIndexDB()
             pindexBestHeader = pindex;
     }
 
-    if (BLOCK_DB_MODE != LEVELDB_BLOCK_STORAGE)
+    if (BLOCK_DB_MODE != DB_BLOCK_STORAGE)
     {
         // Check presence of blk files
 
