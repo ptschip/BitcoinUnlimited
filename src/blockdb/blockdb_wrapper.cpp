@@ -23,6 +23,77 @@ extern std::multimap<CBlockIndex *, CBlockIndex *> mapBlocksUnlinked;
   */
 BlockDBMode BLOCK_DB_MODE = DEFAULT_BLOCK_DB_MODE;
 
+bool DetermineStorageSync()
+{
+    uint256 bestHashSeq = pcoinsTip->GetBestBlock();
+    LOGA("bestHashSeq = %s \n", bestHashSeq.GetHex().c_str());
+    uint256 bestHashLev = pcoinsdbview->GetBestBlockDb();
+    LOGA("bestHashLev = %s \n", bestHashLev.GetHex().c_str());
+    // if we are using method X and method Y doesnt have any sync progress, assume nothing to sync
+
+    LOGA("check1\n");
+    if(bestHashSeq.IsNull() && BLOCK_DB_MODE == DB_BLOCK_STORAGE)
+    {
+        LOGA("false1\n");
+        return false;
+    }
+    LOGA("check2\n");
+    if(bestHashLev.IsNull() && BLOCK_DB_MODE == SEQUENTIAL_BLOCK_FILES)
+    {
+        LOGA("false2\n");
+        return false;
+    }
+    CBlockIndex bestIndexSeq;
+    LOGA("check3\n");
+    pblocktree->FindBlockIndex(bestHashSeq, bestIndexSeq);
+    LOGA("check4\n");
+    CBlockIndex bestIndexLev;
+    pblocktree->FindBlockIndex(bestHashLev, bestIndexLev);
+
+    LOGA("bestIndexSeq info = %i %i %u %u %i %s %u %u %u %u %u \n",
+         bestIndexSeq.nHeight,
+         bestIndexSeq.nFile,
+         bestIndexSeq.nDataPos,
+         bestIndexSeq.nUndoPos,
+         bestIndexSeq.nVersion,
+         bestIndexSeq.hashMerkleRoot.GetHex().c_str(),
+         bestIndexSeq.nTime,
+         bestIndexSeq.nBits,
+         bestIndexSeq.nNonce,
+         bestIndexSeq.nStatus,
+         bestIndexSeq.nTx
+         );
+
+    LOGA("bestIndexLev info = %i %i %u %u %i %s %u %u %u %u %u \n",
+         bestIndexLev.nHeight,
+         bestIndexLev.nFile,
+         bestIndexLev.nDataPos,
+         bestIndexLev.nUndoPos,
+         bestIndexLev.nVersion,
+         bestIndexLev.hashMerkleRoot.GetHex().c_str(),
+         bestIndexLev.nTime,
+         bestIndexLev.nBits,
+         bestIndexLev.nNonce,
+         bestIndexLev.nStatus,
+         bestIndexLev.nTx
+         );
+
+    LOGA("check5\n");
+    // if the best height of the storage type we are using is higher than any other type, return false
+    if(BLOCK_DB_MODE == SEQUENTIAL_BLOCK_FILES && bestIndexSeq.nHeight > bestIndexLev.nHeight)
+    {
+        LOGA("false3\n");
+        return false;
+    }
+    LOGA("check6\n");
+    if(BLOCK_DB_MODE == DB_BLOCK_STORAGE && bestIndexLev.nHeight > bestIndexSeq.nHeight)
+    {
+        LOGA("false4\n");
+        return false;
+    }
+    LOGA("check7\n");
+    return true;
+}
 
 // use this sparingly, this function will be very disk intensive
 {
