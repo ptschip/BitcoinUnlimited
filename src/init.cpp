@@ -1105,12 +1105,6 @@ bool AppInit2(Config &config, boost::thread_group &threadGroup, CScheduler &sche
                         break;
                     }
                 }
-                // run a db sync here to catch leveldb up to sequential files incase we were 
-                // running in sequential before and just changed to leveldb
-                if(BLOCK_DB_MODE == LEVELDB_BLOCK_STORAGE)
-                {
-                    SyncDBForDualMode(chainparams);
-                }
                 if (!CVerifyDB().VerifyDB(chainparams, pcoinsdbview, GetArg("-checklevel", DEFAULT_CHECKLEVEL),
                         GetArg("-checkblocks", DEFAULT_CHECKBLOCKS)))
                 {
