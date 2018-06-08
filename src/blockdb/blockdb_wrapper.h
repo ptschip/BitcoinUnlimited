@@ -24,8 +24,10 @@ enum BlockDBMode
 static const BlockDBMode DEFAULT_BLOCK_DB_MODE = DB_BLOCK_STORAGE;
 extern BlockDBMode BLOCK_DB_MODE;
 
+/** Determine if the block db mode we started with is behind another one already on disk*/
+bool DetermineStorageSync();
+
 /** Catch leveldb up with sequential block files */
-void SyncDBForDualMode(const CChainParams &chainparams);
 
 /** Functions for disk access for blocks */
 bool ReadBlockFromDisk(CBlock &block, const CBlockIndex *pindex, const Consensus::Params &consensusParams);
