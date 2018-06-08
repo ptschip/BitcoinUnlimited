@@ -955,16 +955,16 @@ bool AppInit2(Config &config, boost::thread_group &threadGroup, CScheduler &sche
     }
     else if(requested_block_mode == 1)
     {
-        BLOCK_DB_MODE = LEVELDB_BLOCK_STORAGE;
+        BLOCK_DB_MODE = DB_BLOCK_STORAGE;
     }
     else if(requested_block_mode == 2)
     {
-        BLOCK_DB_MODE = LEVELDB_AND_SEQUENTIAL;
+        BLOCK_DB_MODE = HYBRID_STORAGE;
     }
 
 
     // Upgrading to 0.8; hard-link the old blknnnn.dat files into /blocks/
-    if(BLOCK_DB_MODE != LEVELDB_BLOCK_STORAGE)
+    if(BLOCK_DB_MODE != DB_BLOCK_STORAGE)
     {
         fs::path blocksDir = GetDataDir() / "blocks";
         if (!fs::exists(blocksDir))

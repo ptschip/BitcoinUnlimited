@@ -123,13 +123,13 @@ bool WriteBlockToDisk(const CBlock &block, CDiskBlockPos &pos, const CMessageHea
     {
     	return WriteBlockToDiskSequential(block, pos, messageStart);
     }
-    else if(BLOCK_DB_MODE == LEVELDB_BLOCK_STORAGE)
+    else if(BLOCK_DB_MODE == DB_BLOCK_STORAGE)
     {
         // we want to set nFile inside pos here to -1 so we know its in levelDB block storage, dont do this within dual most since it also uses sequential
 
     	return WriteBlockToDiskLevelDB(block);
     }
-    else if(BLOCK_DB_MODE == LEVELDB_AND_SEQUENTIAL)
+    else if(BLOCK_DB_MODE == HYBRID_STORAGE)
     {
     	bool seq = WriteBlockToDiskSequential(block, pos, messageStart);
     	bool lev = WriteBlockToDiskLevelDB(block);
@@ -153,7 +153,7 @@ bool ReadBlockFromDisk(CBlock &block, const CBlockIndex *pindex, const Consensus
             return error("ReadBlockFromDisk(CBlock&, CBlockIndex*): GetHash() doesn't match index for %s at %s", pindex->ToString(), pindex->GetBlockPos().ToString());
         }
     }
-    else if (BLOCK_DB_MODE == LEVELDB_BLOCK_STORAGE)
+    else if (BLOCK_DB_MODE == DB_BLOCK_STORAGE)
     {
         BlockDBValue value;
         block.SetNull();
@@ -167,7 +167,7 @@ bool ReadBlockFromDisk(CBlock &block, const CBlockIndex *pindex, const Consensus
             return error("ReadBlockFromDisk(CBlock&, CBlockIndex*): GetHash() doesn't match index for %s at %s", pindex->ToString(), pindex->GetBlockPos().ToString());
         }
     }
-    else if (BLOCK_DB_MODE == LEVELDB_AND_SEQUENTIAL)
+    else if (BLOCK_DB_MODE == HYBRID_STORAGE)
     {
     	CBlock blockSeq;
     	CBlock blockLev;
@@ -216,11 +216,11 @@ void FindFilesToPrune(std::set<int> &setFilesToPrune, uint64_t nPruneAfterHeight
     }
     uint64_t nLastBlockWeCanPrune = chainActive.Tip()->nHeight - MIN_BLOCKS_TO_KEEP;
 
-    if(BLOCK_DB_MODE == SEQUENTIAL_BLOCK_FILES || BLOCK_DB_MODE == LEVELDB_AND_SEQUENTIAL)
+    if(BLOCK_DB_MODE == SEQUENTIAL_BLOCK_FILES || BLOCK_DB_MODE == HYBRID_STORAGE)
     {
     	FindFilesToPruneSequential(setFilesToPrune, nLastBlockWeCanPrune);
     }
-    else if(BLOCK_DB_MODE == LEVELDB_BLOCK_STORAGE || BLOCK_DB_MODE == LEVELDB_AND_SEQUENTIAL)
+    else if(BLOCK_DB_MODE == DB_BLOCK_STORAGE || BLOCK_DB_MODE == HYBRID_STORAGE)
     {
     	uint64_t amntPruned = FindFilesToPruneLevelDB(nLastBlockWeCanPrune);
         // because we just prune the DB here and dont have a file set to return, we need to set prune triggers here
@@ -334,14 +334,14 @@ bool FlushStateToDisk(CValidationState &state, FlushStateMode mode)
 
 
                 // we write different info depending on block storage system
-                if(BLOCK_DB_MODE == SEQUENTIAL_BLOCK_FILES || BLOCK_DB_MODE == LEVELDB_AND_SEQUENTIAL)
+                if(BLOCK_DB_MODE == SEQUENTIAL_BLOCK_FILES || BLOCK_DB_MODE == HYBRID_STORAGE)
                 {
                     if (!pblocktree->WriteBatchSync(vFiles, nLastBlockFile, vBlocks))
                     {
                         return AbortNode(state, "Files to write to block index database");
                     }
                 }
-                else if(BLOCK_DB_MODE == LEVELDB_BLOCK_STORAGE || BLOCK_DB_MODE == LEVELDB_AND_SEQUENTIAL)
+                else if(BLOCK_DB_MODE == DB_BLOCK_STORAGE || BLOCK_DB_MODE == HYBRID_STORAGE)
                 {
                     // vFiles should be empty for a LEVELDB call so insert a blank vector instead
                     std::vector<std::pair<int, const CBlockFileInfo *> > vFilesEmpty;
