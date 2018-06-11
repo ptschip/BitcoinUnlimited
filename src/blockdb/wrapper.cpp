@@ -281,6 +281,35 @@ bool ReadBlockFromDisk(CBlock &block, const CBlockIndex *pindex, const Consensus
     return false;
 }
 
+bool UndoWriteToDisk(const CBlockUndo &blockundo, CDiskBlockPos &pos, const uint256 &hashBlock, const CMessageHeader::MessageStartChars &messageStart)
+{
+    if(BLOCK_DB_MODE == SEQUENTIAL_BLOCK_FILES)
+    {
+        return UndoWriteToDiskSequenatial(blockundo, pos, hashBlock, messageStart);
+    }
+    else if(BLOCK_DB_MODE == DB_BLOCK_STORAGE)
+    {
+        return UndoWriteToDB(blockundo, hashBlock);
+    }
+    // default return of false
+    return false;
+}
+
+bool UndoReadFromDisk(CBlockUndo &blockundo, const CDiskBlockPos &pos, const uint256 &hashBlock)
+{
+    if(BLOCK_DB_MODE == SEQUENTIAL_BLOCK_FILES)
+    {
+        return UndoReadFromDiskSequential(blockundo, pos, hashBlock);
+    }
+    else if(BLOCK_DB_MODE == DB_BLOCK_STORAGE)
+    {
+        return UndoReadFromDB(blockundo, hashBlock);
+    }
+    // default return of false
+    return true;
+}
+
+
 /* Calculate the block/rev files that should be deleted to remain under target*/
 void FindFilesToPrune(std::set<int> &setFilesToPrune, uint64_t nPruneAfterHeight)
 {
