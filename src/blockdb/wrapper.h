@@ -5,6 +5,8 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include "main.h"
+#include "blockdb.h"
+#include "undo.h"
 
 enum FlushStateMode
 {
@@ -17,8 +19,7 @@ enum FlushStateMode
 enum BlockDBMode
 {
     SEQUENTIAL_BLOCK_FILES, //0
-    DB_BLOCK_STORAGE, //1
-    HYBRID_STORAGE // 2
+    DB_BLOCK_STORAGE //1
 };
 
 static const BlockDBMode DEFAULT_BLOCK_DB_MODE = DB_BLOCK_STORAGE;
@@ -28,6 +29,7 @@ extern BlockDBMode BLOCK_DB_MODE;
 bool DetermineStorageSync();
 
 /** Catch leveldb up with sequential block files */
+void SyncStorage(const CChainParams &chainparams);
 
 /** Functions for disk access for blocks */
 bool ReadBlockFromDisk(CBlock &block, const CBlockIndex *pindex, const Consensus::Params &consensusParams);
