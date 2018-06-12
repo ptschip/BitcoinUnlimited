@@ -11,6 +11,7 @@
 #include "chainparams.h"
 #include "dbwrapper.h"
 #include "main.h"
+#include "undo.h"
 
 extern bool AbortNode(CValidationState &state, const std::string &strMessage, const std::string &userMessage = "");
 extern bool fCheckForPruning;
@@ -225,6 +226,21 @@ void SyncStorage(const CChainParams &chainparams)
                 LOGA("critical error, failed to write block to leveldb, asserting false \n");
                 assert(false);
             }
+            /** we wrote the block to disk now we need to write its undo data */
+            CBlockUndo blockundo;
+            // get the undo data from the sequential undo file
+            CDiskBlockPos pos = pindex->GetUndoPos();
+            if (pos.IsNull())
+            {
+                LOGA("SyncStorage(): critical error, no undo data available \n");
+                assert(false);
+            }
+            if (!UndoReadFromDiskSequential(blockundo, pos, pindex->pprev->GetBlockHash()))
+            {
+                LOGA("SyncStorage(): critical error, failure to read undo data from sequential files \n");
+                assert(false);
+            }
+            UndoWriteToDB(blockundo, block_seq.GetHash());
             pindex = pindex->pprev;
         }
         pcoinsdbview->WriteBestBlockDb(pindexValid->GetBlockHash());
