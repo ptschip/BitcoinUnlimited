@@ -167,7 +167,7 @@ void SyncStorage(const CChainParams &chainparams)
     if(BLOCK_DB_MODE == DB_BLOCK_STORAGE)
     {
         // get the best block and go to it. we can sync the blocks in reverse to save time once we hit our best
-        uint256 bestHashSeq = pcoinsTip->GetBestBlock();
+        uint256 bestHashSeq = pcoinsdbview->GetBestBlockSeq();
         uint256 bestHashDb = pcoinsdbview->GetBestBlockDb();
         BlockMap::iterator iter;
         iter = mapBlockIndex.find(bestHashSeq);
