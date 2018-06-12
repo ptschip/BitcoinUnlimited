@@ -3890,7 +3890,7 @@ bool static LoadBlockIndexDB()
 
     // Load pointer to end of best chain
     uint256 bestblockhash;
-    uint256 bestHashSeq = pcoinsTip->GetBestBlock();
+    uint256 bestHashSeq = pcoinsdbview->GetBestBlockSeq();
     uint256 bestHashLev = pcoinsdbview->GetBestBlockDb();
 
     CBlockIndex bestIndexSeq;
