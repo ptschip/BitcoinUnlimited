@@ -206,7 +206,7 @@ public:
         pprev = NULL;
         pskip = NULL;
         nHeight = 0;
-        nFile = 0;
+        nFile = -1;
         nDataPos = 0;
         nUndoPos = 0;
         nChainWork = arith_uint256();
