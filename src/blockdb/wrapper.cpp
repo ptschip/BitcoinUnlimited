@@ -169,13 +169,13 @@ void SyncStorage(const CChainParams &chainparams)
     {
         // multiple testing trials with adjustments have proven that using bestblock from the coinsviewdb is very unreliable/unstable due to the way
         // PV cleans up its block validation thread when given the shutdown signal.
-        // we just iterate through the entire mapblockindex instead and check for exists before writting to prevent wasting time.
+        // we just iterate through the entire mapblockindex instead.
         BlockMap::iterator iter = mapBlockIndex.begin();
         int64_t bestHeight = 0;
         CBlockIndex* pindexBest;
         for(iter = mapBlockIndex.begin(); iter != mapBlockIndex.end(); ++iter)
         {
-            if(iter->second->nStatus & BLOCK_HAVE_DATA && pblockdb->Exists(iter->second->GetBlockHash()) == false)
+            if(iter->second->nStatus & BLOCK_HAVE_DATA)
             {
                 CBlock block_seq;
                 if(!ReadBlockFromDiskSequential(block_seq, iter->second->GetBlockPos(), chainparams.GetConsensus()))
@@ -189,7 +189,7 @@ void SyncStorage(const CChainParams &chainparams)
                     assert(false);
                 }
             }
-            if(iter->second->nStatus & BLOCK_HAVE_UNDO && pblockundodb->Exists(iter->second->GetBlockHash()) == false)
+            if(iter->second->nStatus & BLOCK_HAVE_UNDO)
             {
                 CBlockUndo blockundo;
                 // get the undo data from the sequential undo file
