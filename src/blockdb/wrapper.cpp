@@ -194,12 +194,20 @@ void SyncStorage(const CChainParams &chainparams)
         // validate we have all block data for ancestors
         CBlockIndex* pindexValidate = pindex;
         CBlockIndex* pindexValid = pindex;
+        CBlockIndex* pindexBestUndo = pindex;
         while(pindexValidate->GetBlockHash() != chainparams.GetConsensus().hashGenesisBlock)
         {
             // if we dont have the block data we set the best valid index to our prev
-            if(!(pindexValidate->nStatus & BLOCK_HAVE_DATA))
+            if(!(pindexValidate->nStatus & BLOCK_HAVE_UNDO))
             {
-                pindexValid = pindexValidate->pprev;
+                if(!(pindexValidate->nStatus & BLOCK_HAVE_DATA))
+                {
+                    pindexValid = pindexValidate->pprev;
+                }
+                else
+                {
+                    pindexBestUndo = pindexValidate->pprev;
+                }
             }
             pindexValidate = pindexValidate->pprev;
         }
@@ -211,14 +219,14 @@ void SyncStorage(const CChainParams &chainparams)
             if(pindex->GetBlockHash() == chainparams.GetConsensus().hashGenesisBlock)
             {
                 /** we are done*/
-                LOGA("returning because pindex has hit genesis block \n");
-                return;
+                LOGA("break because pindex has hit genesis block \n");
+                break;
             }
             CBlock block_seq;
-            //printf("opening for hash %s \n", iter->second->GetBlockHash().GetHex().c_str());
             if(!ReadBlockFromDiskSequential(block_seq, pindex->GetBlockPos(), chainparams.GetConsensus()))
             {
                 LOGA("FAILED to read from sequential for hash %s \n", pindex->GetBlockHash().GetHex().c_str());
+                pindex = pindex->pprev;
                 continue;
             }
             if(!WriteBlockToDB(block_seq))
@@ -232,18 +240,38 @@ void SyncStorage(const CChainParams &chainparams)
             CDiskBlockPos pos = pindex->GetUndoPos();
             if (pos.IsNull())
             {
-                LOGA("SyncStorage(): critical error, no undo data available \n");
-                assert(false);
+                // we have more BLOCK_HAVE_DATA than BLOCK_HAVE_UNDO so as long as we arent
+                // missing undo for a block that shoud have it we are good and can continue
+                if (!(pindex->nStatus & BLOCK_HAVE_UNDO))
+                {
+                    pindex = pindex->pprev;
+                    continue;
+                }
+                else
+                {
+                    LOGA("SyncStorage(): critical error, no undo data available for hash %s \n", pindex->GetBlockHash().GetHex().c_str());
+                    assert(false);
+                }
             }
             if (!UndoReadFromDiskSequential(blockundo, pos, pindex->pprev->GetBlockHash()))
             {
                 LOGA("SyncStorage(): critical error, failure to read undo data from sequential files \n");
                 assert(false);
             }
-            UndoWriteToDB(blockundo, block_seq.GetHash());
+            UndoWriteToDB(blockundo, pindex->pprev->GetBlockHash());
             pindex = pindex->pprev;
         }
-        pcoinsdbview->WriteBestBlockDb(pindexValid->GetBlockHash());
+        LOGA("best block with undo had hash %s \n", pindexBestUndo->GetBlockHash().GetHex().c_str());
+        LOGA("best block with data had hash %s \n", pindexValid->GetBlockHash().GetHex().c_str());
+
+        if(pindexBestUndo->nHeight < pindexValid->nHeight)
+        {
+            pcoinsdbview->WriteBestBlockDb(pindexBestUndo->GetBlockHash());
+        }
+        else
+        {
+            pcoinsdbview->WriteBestBlockDb(pindexValid->GetBlockHash());
+        }
         LOGA("we have synced all missing blocks \n");
     }
 }
