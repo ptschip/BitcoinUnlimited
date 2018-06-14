@@ -159,8 +159,8 @@ void SyncStorage(const CChainParams &chainparams)
                     AbortNode(state, "Failed to sync block from db to sequential files");
                 }
                 // set this blocks file and data pos
-                it->second->nFile = pos.nFile;
-                it->second->nDataPos = pos.nPos;
+                it->second->nFile = blockPos.nFile;
+                it->second->nDataPos = blockPos.nPos;
             }
             if(it->second->nStatus & BLOCK_HAVE_UNDO && !it->second->GetBlockPos().IsNull())
             {
