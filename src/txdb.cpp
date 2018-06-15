@@ -187,6 +187,8 @@ bool CCoinsViewDB::BatchWrite(CCoinsMap &mapCoins,
     }
     if (!hashBlock.IsNull() && BLOCK_DB_MODE == SEQUENTIAL_BLOCK_FILES)
         batch.Write(DB_BEST_BLOCK, hashBlock);
+    else if(!hashBlock.IsNull() && BLOCK_DB_MODE == DB_BLOCK_STORAGE)
+        batch.Write(DB_BEST_BLOCK_BLOCKDB, hashBlock);
 
     bool ret = db.WriteBatch(batch);
     LOG(COINDB, "Committing %u changed transactions (out of %u) to coin database with %u batch writes...\n",
