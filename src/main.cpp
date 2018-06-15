@@ -1519,12 +1519,6 @@ static DisconnectResult DisconnectBlock(const CBlock &block, const CBlockIndex *
     // move best block pointer to prevout block
     view.SetBestBlock(pindex->pprev->GetBlockHash());
 
-    // if we are not set to sequential, update the best block hash for leveldb storage
-    if(BLOCK_DB_MODE != SEQUENTIAL_BLOCK_FILES)
-    {
-        pcoinsdbview->WriteBestBlockDb(pindex->pprev->GetBlockHash());
-    }
-
     return fClean ? DISCONNECT_OK : DISCONNECT_UNCLEAN;
 }
 
@@ -1742,12 +1736,6 @@ bool ConnectBlock(const CBlock &block,
         if (!fJustCheck)
         {
             view.SetBestBlock(pindex->GetBlockHash());
-
-            // if we are not set to sequential, update the best block hash for leveldb storage
-            if(BLOCK_DB_MODE != SEQUENTIAL_BLOCK_FILES)
-            {
-                pcoinsdbview->WriteBestBlockDb(pindex->GetBlockHash());
-            }
         }
         return true;
     }
@@ -2096,12 +2084,6 @@ bool ConnectBlock(const CBlock &block,
 
     // add this block to the view's block chain (the main UTXO in memory cache)
     view.SetBestBlock(pindex->GetBlockHash());
-
-    // if we are not set to sequential, update the best block hash for leveldb storage
-    if(BLOCK_DB_MODE != SEQUENTIAL_BLOCK_FILES)
-    {
-        pcoinsdbview->WriteBestBlockDb(pindex->GetBlockHash());
-    }
 
     int64_t nTime5 = GetTimeMicros();
     nTimeIndex += nTime5 - nTime4;
