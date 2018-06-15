@@ -81,13 +81,13 @@ bool DetermineStorageSync()
 
     LOGA("check5\n");
     // if the best height of the storage type we are using is higher than any other type, return false
-    if(BLOCK_DB_MODE == SEQUENTIAL_BLOCK_FILES && bestIndexSeq.nHeight > bestIndexLev.nHeight)
+    if(BLOCK_DB_MODE == SEQUENTIAL_BLOCK_FILES && bestIndexSeq.nHeight >= bestIndexLev.nHeight)
     {
         LOGA("false3\n");
         return false;
     }
     LOGA("check6\n");
-    if(BLOCK_DB_MODE == DB_BLOCK_STORAGE && bestIndexLev.nHeight > bestIndexSeq.nHeight)
+    if(BLOCK_DB_MODE == DB_BLOCK_STORAGE && bestIndexLev.nHeight >= bestIndexSeq.nHeight)
     {
         LOGA("false4\n");
         return false;
