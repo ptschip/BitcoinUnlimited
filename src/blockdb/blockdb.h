@@ -33,16 +33,16 @@ struct BlockDBValue
     template <typename Stream>
     void Serialize(Stream &s) const
     {
-        s << VARINT(blockVersion);
-        s << VARINT(blockHeight);
+        s << READWRITE(blockVersion);
+        s << READWRITE(blockHeight);
         s << block;
     }
 
     template <typename Stream>
     void Unserialize(Stream &s)
     {
-        s >> VARINT(blockVersion);
-        s >> VARINT(blockHeight);
+        s >> READWRITE(blockVersion);
+        s >> READWRITE(blockHeight);
         s >> block;
     }
 
