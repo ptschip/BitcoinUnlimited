@@ -1442,7 +1442,8 @@ static DisconnectResult DisconnectBlock(const CBlock &block, const CBlockIndex *
 
     CBlockUndo blockUndo;
     CDiskBlockPos pos = pindex->GetUndoPos();
-    if (pos.IsNull())
+    // blockdb mode does not use the file pos system
+    if (pos.IsNull() && BLOCK_DB_MODE == SEQUENTIAL_BLOCK_FILES)
     {
         error("DisconnectBlock(): no undo data available");
         return DISCONNECT_FAILED;
@@ -3014,8 +3015,13 @@ CBlockIndex *AddToBlockIndex(const CBlockHeader &block)
 bool ReceivedBlockTransactions(const CBlock &block,
     CValidationState &state,
     CBlockIndex *pindexNew,
-    const CDiskBlockPos &pos)
+    CDiskBlockPos &pos)
 {
+    if(BLOCK_DB_MODE == DB_BLOCK_STORAGE)
+    {
+        pos.SetNull();
+    }
+
     pindexNew->nTx = block.vtx.size();
     pindexNew->nChainTx = 0;
     pindexNew->nFile = pos.nFile;
