@@ -31,6 +31,8 @@ static const char DB_FLAG = 'F';
 static const char DB_REINDEX_FLAG = 'R';
 static const char DB_LAST_BLOCK = 'l';
 
+static const char DB_IMPORTED = 'I';
+
 // to distinguish best block for a specific DB type, values correspond to enum vaue (blockdb_wrapper.h)
 static const char DB_BEST_BLOCK_BLOCKDB = 'D';
 
@@ -475,6 +477,13 @@ bool CBlockTreeDB::LoadBlockIndexGutsCompatible()
 
 bool CBlockTreeDB::ImportForCompatibility()
 {
+    bool imported = false;
+    this->Read(DB_IMPORTED, imported);
+    if(imported)
+    {
+        return true;
+    }
+
     int64_t cache = 0;
     int64_t temp1 = 0;
     int64_t temp2 = 0;
@@ -541,7 +550,7 @@ bool CBlockTreeDB::ImportForCompatibility()
             }
             else
             {
-                return error("LoadBlockIndex() : failed to read value");
+                return error("ImportForCompatibility() : failed to read value");
             }
         }
         else
@@ -568,6 +577,8 @@ bool CBlockTreeDB::ImportForCompatibility()
         ptreetemp->ReadBlockFileInfo(nFile, tempfile);
         this->Write(make_pair(DB_BLOCK_FILES, nFile), tempfile);
     }
+    imported = true;
+    this->Write(DB_IMPORTED, imported);
 
     return true;
 }

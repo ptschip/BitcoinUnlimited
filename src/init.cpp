@@ -1017,6 +1017,7 @@ bool AppInit2(Config &config, boost::thread_group &threadGroup, CScheduler &sche
                 if(BLOCK_DB_MODE == DB_BLOCK_STORAGE || fs::exists(GetDataDir() / "blockdb" / "index"))
                 {
                     pblocktree = new CBlockTreeDB(nBlockTreeDBCache, "blockdb", false, fReindex);
+                    pblocktree->ImportForCompatibility();
                 }
                 else
                 {
