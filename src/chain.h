@@ -104,7 +104,7 @@ struct CDiskBlockPos
     }
     bool IsNull() const
     {
-        return (nFile == 0);
+        return (nFile == -1);
     }
     std::string ToString() const { return strprintf("CBlockDiskPos(nFile=%i, nPos=%i)", nFile, nPos); }
 };
