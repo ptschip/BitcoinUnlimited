@@ -3838,6 +3838,12 @@ bool static LoadBlockIndexDB()
         LOGA("Checking all blk files are present...\n");
         for (std::set<int>::iterator it = setBlkDataFiles.begin(); it != setBlkDataFiles.end(); it++)
         {
+            if((*it) < 0 )
+            {
+                // a negative file means the block is in the blockdb not a sequential file
+                // contineu to prevent checking for a file we know doesnt exist
+                continue;
+            }
             CDiskBlockPos pos(*it, 0);
             fs::path path = GetBlockPosFilename(pos, "blk");
             if (!fs::exists(path))
