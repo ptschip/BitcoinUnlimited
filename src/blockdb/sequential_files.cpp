@@ -169,9 +169,9 @@ void PruneOneBlockFile(const int fileNumber)
         {
             pindex->nStatus &= ~BLOCK_HAVE_DATA;
             pindex->nStatus &= ~BLOCK_HAVE_UNDO;
-            pindex->nFile = 0;
-            pindex->nDataPos = 0;
-            pindex->nUndoPos = 0;
+            pindex->nFile = -1;
+            pindex->nDataPos = -1;
+            pindex->nUndoPos = -1;
             setDirtyBlockIndex.insert(pindex);
 
             // Prune from mapBlocksUnlinked -- any block we prune would have
