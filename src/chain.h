@@ -100,9 +100,12 @@ struct CDiskBlockPos
     void SetNull()
     {
         nFile = -1;
-        nPos = 0;
+        nPos = -1;
     }
-    bool IsNull() const { return (nFile == -1); }
+    bool IsNull() const
+    {
+        return (nFile == -1 || nPos == -1);
+    }
     std::string ToString() const { return strprintf("CBlockDiskPos(nFile=%i, nPos=%i)", nFile, nPos); }
 };
 
@@ -207,8 +210,8 @@ public:
         pskip = NULL;
         nHeight = 0;
         nFile = -1;
-        nDataPos = 0;
-        nUndoPos = 0;
+        nDataPos = -1;
+        nUndoPos = -1;
         nChainWork = arith_uint256();
         nTx = 0;
         nChainTx = 0;
