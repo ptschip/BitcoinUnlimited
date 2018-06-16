@@ -3886,34 +3886,15 @@ bool static LoadBlockIndexDB()
 
     // Load pointer to end of best chain
     uint256 bestblockhash;
-    uint256 bestHashSeq = pcoinsdbview->GetBestBlockSeq();
-    uint256 bestHashLev = pcoinsdbview->GetBestBlockDb();
-
-    CBlockIndex bestIndexSeq;
-    pblocktree->FindBlockIndex(bestHashSeq, bestIndexSeq);
-    CBlockIndex bestIndexLev;
-    pblocktree->FindBlockIndex(bestHashLev, bestIndexLev);
-
-    if(!bestHashSeq.IsNull() && bestHashLev.IsNull())
+    if(BLOCK_DB_MODE == SEQUENTIAL_BLOCK_FILES)
     {
-        bestblockhash = bestHashSeq;
+        bestblockhash = pcoinsdbview->GetBestBlockSeq();
     }
-    else if(bestHashSeq.IsNull() && !bestHashLev.IsNull())
+    if(BLOCK_DB_MODE == DB_BLOCK_STORAGE)
     {
-        bestblockhash = bestHashLev;
+        bestblockhash = pcoinsdbview->GetBestBlockDb();
     }
-    else if(bestIndexSeq.nHeight > bestIndexLev.nHeight)
-    {
-        bestblockhash = bestHashSeq;
-    }
-    else
-    {
-        bestblockhash = bestHashLev;
-    }
-
     BlockMap::iterator it = mapBlockIndex.find(bestblockhash);
-    LOGA("height of best seq block = %i \n", bestIndexSeq.nHeight);
-    LOGA("height of best db block = %i \n", bestIndexLev.nHeight);
     LOGA("best block hash of %s was found \n", bestblockhash.GetHex().c_str());
     if (it == mapBlockIndex.end())
     {
