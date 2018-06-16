@@ -386,11 +386,11 @@ public:
         READWRITE(VARINT(nStatus));
         READWRITE(VARINT(nTx));
         if (nStatus & (BLOCK_HAVE_DATA | BLOCK_HAVE_UNDO))
-            READWRITE(VARINT(nFile));
+            READWRITE(nFile);
         if (nStatus & BLOCK_HAVE_DATA)
-            READWRITE(VARINT(nDataPos));
+            READWRITE(nDataPos);
         if (nStatus & BLOCK_HAVE_UNDO)
-            READWRITE(VARINT(nUndoPos));
+            READWRITE(nUndoPos);
 
         // block header
         READWRITE(this->nVersion);
