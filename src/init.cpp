@@ -943,20 +943,10 @@ bool AppInit2(Config &config, boost::thread_group &threadGroup, CScheduler &sche
     // ********************************************************* Step 6: load block chain
 
     fReindex = GetBoolArg("-reindex", DEFAULT_REINDEX);
-    int64_t requested_block_mode = GetArg("-blockdbtype", 1);
-    // if invalid param, set to default setting,
-    if(requested_block_mode > 1 || requested_block_mode < 0)
-    {
-        BLOCK_DB_MODE = DEFAULT_BLOCK_DB_MODE;
-    }
-    /// TODO : this is not the way we want to do this, but it is fine for now
-    if(requested_block_mode == 0)
+    int64_t requested_block_mode = GetArg("-useblockdb", true);
+    if(!requested_block_mode)
     {
         BLOCK_DB_MODE = SEQUENTIAL_BLOCK_FILES;
-    }
-    else if(requested_block_mode == 1)
-    {
-        BLOCK_DB_MODE = DB_BLOCK_STORAGE;
     }
 
 
