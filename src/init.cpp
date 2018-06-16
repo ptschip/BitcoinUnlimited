@@ -1014,7 +1014,14 @@ bool AppInit2(Config &config, boost::thread_group &threadGroup, CScheduler &sche
                 delete pblockundodb;
 
                 uiInterface.InitMessage(_("Opening Block database..."));
-                pblocktree = new CBlockTreeDB(nBlockTreeDBCache, false, fReindex);
+                if(BLOCK_DB_MODE == DB_BLOCK_STORAGE || fs::exists(GetDataDir() / "blockdb" / "index"))
+                {
+                    pblocktree = new CBlockTreeDB(nBlockTreeDBCache, "blockdb", false, fReindex);
+                }
+                else
+                {
+                    pblocktree = new CBlockTreeDB(nBlockTreeDBCache, "blocks", false, fReindex);
+                }
                 pblockdb = new CBlockDB("blocks", nBlockTreeDBCache, false, false);
                 pblockundodb = new CBlockDB("undo", nBlockTreeDBCache, false, false);
                 uiInterface.InitMessage(_("Opening UTXO database..."));
