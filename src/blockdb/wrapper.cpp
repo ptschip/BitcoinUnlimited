@@ -225,7 +225,7 @@ void SyncStorage(const CChainParams &chainparams)
                         it->second->nFile = blockPos.nFile;
                         it->second->nDataPos = blockPos.nPos;
                     }
-                    if(it->second->nStatus & BLOCK_HAVE_UNDO == false)
+                    if((it->second->nStatus & BLOCK_HAVE_UNDO) == false)
                     {
                         if(tempindex->nStatus & BLOCK_HAVE_UNDO && tempindex->nUndoPos != 0)
                         {
