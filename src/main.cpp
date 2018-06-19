@@ -383,6 +383,7 @@ CBlockIndex *FindForkInGlobalIndex(const CChain &chain, const CBlockLocator &loc
 
 CCoinsViewCache *pcoinsTip = NULL;
 CBlockTreeDB *pblocktree = NULL;
+CBlockTreeDB *pblocktreeother = NULL;
 
 bool CheckFinalTx(const CTransaction &tx, int flags)
 {
