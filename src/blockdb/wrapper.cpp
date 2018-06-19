@@ -117,7 +117,7 @@ void SyncStorage(const CChainParams &chainparams)
         pblocktreeother->GetSortedHashIndex(hashesByHeight);
         CValidationState state;
         int bestHeight = 0;
-        CBlockIndex* pindexBest;
+        CBlockIndex* pindexBest = new CBlockIndex();
         if(mapBlockIndex.size() > hashesByHeight.size())
         {
             // we dont need to sync
@@ -129,7 +129,7 @@ void SyncStorage(const CChainParams &chainparams)
             it = mapBlockIndex.find(item.second);
             if(it == mapBlockIndex.end())
             {
-                CBlockIndex* tempindex;
+                CBlockIndex* tempindex = new CBlockIndex();
                 pblocktreeother->FindBlockIndex(item.second, tempindex);
                 CBlockIndex* pindexNew =    InsertBlockIndex(tempindex->GetBlockHash());
                 pindexNew->pprev =          InsertBlockIndex(tempindex->pprev->GetBlockHash());
@@ -210,7 +210,7 @@ void SyncStorage(const CChainParams &chainparams)
                 // conditional for undo data inside block data because we need to have block data to have undo data
                 if((it->second->nStatus & BLOCK_HAVE_DATA) == false)
                 {
-                    CBlockIndex* tempindex;
+                    CBlockIndex* tempindex = new CBlockIndex();
                     pblocktreeother->FindBlockIndex(it->second->GetBlockHash(), tempindex);
                     if(tempindex->nStatus & BLOCK_HAVE_DATA && tempindex->nDataPos != 0)
                     {
@@ -288,7 +288,7 @@ void SyncStorage(const CChainParams &chainparams)
         std::vector<std::pair<int, uint256> > hashesByHeight;
         pblocktreeother->GetSortedHashIndex(hashesByHeight);
         int64_t bestHeight = 0;
-        CBlockIndex* pindexBest;
+        CBlockIndex* pindexBest = new CBlockIndex();
         for (const std::pair<int, uint256> &item : hashesByHeight)
         {
             BlockMap::iterator iter;
@@ -296,7 +296,7 @@ void SyncStorage(const CChainParams &chainparams)
             CBlockIndex* index;
             if(iter == mapBlockIndex.end())
             {
-                CBlockIndex* tempindex;
+                CBlockIndex* tempindex = new CBlockIndex();
                 pblocktreeother->FindBlockIndex(item.second, tempindex);
                 CBlockIndex* pindexNew =    InsertBlockIndex(tempindex->GetBlockHash());
                 pindexNew->pprev =          InsertBlockIndex(tempindex->pprev->GetBlockHash());
