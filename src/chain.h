@@ -99,7 +99,7 @@ struct CDiskBlockPos
     friend bool operator!=(const CDiskBlockPos &a, const CDiskBlockPos &b) { return !(a == b); }
     void SetNull()
     {
-        nFile = 0;
+        nFile = -1;
         nPos = 0;
     }
     bool IsNull() const
