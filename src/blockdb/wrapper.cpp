@@ -173,7 +173,7 @@ void SyncStorage(const CChainParams &chainparams)
                 if(pindexNew->nStatus & BLOCK_HAVE_DATA && tempindex->nDataPos != 0)
                 {
                     BlockDBValue blockValue;
-                    pblockdb->Read(it->second->GetBlockHash(), blockValue);
+                    pblockdb->Read(pindexNew->GetBlockHash(), blockValue);
                     CBlock block_lev = blockValue.block;
                     unsigned int nBlockSize = ::GetSerializeSize(block_lev, SER_DISK, CLIENT_VERSION);
                     CDiskBlockPos blockPos;
@@ -187,27 +187,27 @@ void SyncStorage(const CChainParams &chainparams)
                         AbortNode(state, "Failed to sync block from db to sequential files");
                     }
                     // set this blocks file and data pos
-                    it->second->nFile = blockPos.nFile;
-                    it->second->nDataPos = blockPos.nPos;
+                    pindexNew->nFile = blockPos.nFile;
+                    pindexNew->nDataPos = blockPos.nPos;
                 }
                 if(pindexNew->nStatus & BLOCK_HAVE_UNDO && tempindex->nUndoPos != 0)
                 {
                     CBlockUndo blockundo;
-                    if(!UndoReadFromDB(blockundo, it->second->GetBlockHash()))
+                    if(!UndoReadFromDB(blockundo, pindexNew->GetBlockHash()))
                     {
-                        LOGA("SyncStorage(): failed to read undo data for block with hash %s \n", it->second->GetBlockHash().GetHex().c_str());
+                        LOGA("SyncStorage(): failed to read undo data for block with hash %s \n", pindexNew->GetBlockHash().GetHex().c_str());
                         continue;
                     }
                     CDiskBlockPos pos;
-                    if (!FindUndoPos(state, it->second->nFile, pos, ::GetSerializeSize(blockundo, SER_DISK, CLIENT_VERSION) + 40))
+                    if (!FindUndoPos(state, pindexNew->nFile, pos, ::GetSerializeSize(blockundo, SER_DISK, CLIENT_VERSION) + 40))
                     {
                         LOGA("SyncStorage(): FindUndoPos failed");
                         assert(false);
                     }
                     uint256 prevHash;
-                    if (it->second->pprev) // genesis block prev hash is 0
+                    if (pindexNew->pprev) // genesis block prev hash is 0
                     {
-                        prevHash = it->second->pprev->GetBlockHash();
+                        prevHash = pindexNew->pprev->GetBlockHash();
                     }
                     else
                     {
@@ -219,9 +219,9 @@ void SyncStorage(const CChainParams &chainparams)
                         assert(false);
                     }
                     // update nUndoPos in block index
-                    it->second->nUndoPos = pos.nPos;
+                    pindexNew->nUndoPos = pos.nPos;
                 }
-                if(pindexNew->nStatus & BLOCK_HAVE_DATA && pindexNew->nStatus & BLOCK_HAVE_UNDO)
+                if(pindexNew->nStatus & BLOCK_HAVE_DATA && pindexNew->nStatus & BLOCK_HAVE_UNDO && pindexNew->nUndoPos != 0)
                 {
                     if(pindexNew->nHeight > bestHeight)
                     {
