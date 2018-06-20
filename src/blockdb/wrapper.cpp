@@ -295,13 +295,34 @@ void SyncStorage(const CChainParams &chainparams)
         CBlockIndex* pindexBest = new CBlockIndex();
         for (const std::pair<int, uint256> &item : hashesByHeight)
         {
+            CBlockIndex* index;
             if(item.second == chainparams.GetConsensus().hashGenesisBlock)
             {
+                CBlock &block = const_cast<CBlock &>(chainparams.GenesisBlock());
+                // Start new block file
+                unsigned int nBlockSize = ::GetSerializeSize(block, SER_DISK, CLIENT_VERSION);
+                CDiskBlockPos blockPos;
+                CValidationState state;
+                if (!FindBlockPos(state, blockPos, nBlockSize + 8, 0, block.GetBlockTime(), false))
+                {
+                    LOGA("SyncStorage(): FindBlockPos failed");
+                    assert(false);
+                }
+                if (!WriteBlockToDisk(block, blockPos, chainparams.MessageStart()))
+                {
+                    LOGA("SyncStorage(): writing genesis block to disk failed");
+                    assert(false);
+                }
+                CBlockIndex *pindex = AddToBlockIndex(block);
+                if (!ReceivedBlockTransactions(block, state, pindex, blockPos))
+                {
+                    LOGA("SyncStorage(): genesis block not accepted");
+                    assert(false);
+                }
                 continue;
             }
             BlockMap::iterator iter;
             iter = mapBlockIndex.find(item.second);
-            CBlockIndex* index;
             if(iter == mapBlockIndex.end())
             {
                 CDiskBlockIndex* tempindex = new CDiskBlockIndex();
@@ -320,13 +341,13 @@ void SyncStorage(const CChainParams &chainparams)
                 pindexNew->nNonce =         tempindex->nNonce;
                 pindexNew->nStatus =        tempindex->nStatus;
                 pindexNew->nTx =            tempindex->nTx;
-                index = pindexBest;
+                index = pindexNew;
             }
             else
             {
                 index = iter->second;
             }
-            if(index->nStatus & BLOCK_HAVE_DATA)
+            if(index->nStatus & BLOCK_HAVE_DATA && !index->GetBlockPos().IsNull())
             {
                 CBlock block_seq;
                 if(!ReadBlockFromDiskSequential(block_seq, index->GetBlockPos(), chainparams.GetConsensus()))
@@ -340,7 +361,7 @@ void SyncStorage(const CChainParams &chainparams)
                     assert(false);
                 }
             }
-            if(index->nStatus & BLOCK_HAVE_UNDO)
+            if(index->nStatus & BLOCK_HAVE_UNDO && !index->GetUndoPos().IsNull())
             {
                 CBlockUndo blockundo;
                 // get the undo data from the sequential undo file
@@ -361,7 +382,7 @@ void SyncStorage(const CChainParams &chainparams)
                     assert(false);
                 }
             }
-            if(index->nStatus & BLOCK_HAVE_UNDO && index->nStatus & BLOCK_HAVE_DATA)
+            if(!index->GetUndoPos().IsNull() && !index->GetBlockPos().IsNull())
             {
                 if(index->nHeight > bestHeight)
                 {
