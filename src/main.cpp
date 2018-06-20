@@ -3000,11 +3000,6 @@ bool ReceivedBlockTransactions(const CBlock &block,
     CBlockIndex *pindexNew,
     CDiskBlockPos &pos)
 {
-    if(BLOCK_DB_MODE == DB_BLOCK_STORAGE)
-    {
-        pos.SetNull();
-    }
-
     pindexNew->nTx = block.vtx.size();
     pindexNew->nChainTx = 0;
     pindexNew->nFile = pos.nFile;
