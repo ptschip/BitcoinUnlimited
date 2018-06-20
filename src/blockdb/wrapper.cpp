@@ -190,38 +190,48 @@ void SyncStorage(const CChainParams &chainparams)
                     pindexNew->nFile = blockPos.nFile;
                     pindexNew->nDataPos = blockPos.nPos;
                 }
+                else
+                {
+                    pindexNew->nStatus &= BLOCK_HAVE_DATA;
+                }
                 if(pindexNew->nStatus & BLOCK_HAVE_UNDO && tempindex->nUndoPos != 0)
                 {
                     CBlockUndo blockundo;
-                    if(!UndoReadFromDB(blockundo, pindexNew->GetBlockHash()))
+                    if(UndoReadFromDB(blockundo, pindexNew->GetBlockHash()))
                     {
-                        LOGA("SyncStorage(): failed to read undo data for block with hash %s \n", pindexNew->GetBlockHash().GetHex().c_str());
-                        continue;
-                    }
-                    CDiskBlockPos pos;
-                    if (!FindUndoPos(state, pindexNew->nFile, pos, ::GetSerializeSize(blockundo, SER_DISK, CLIENT_VERSION) + 40))
-                    {
-                        LOGA("SyncStorage(): FindUndoPos failed");
-                        assert(false);
-                    }
-                    uint256 prevHash;
-                    if (pindexNew->pprev) // genesis block prev hash is 0
-                    {
-                        prevHash = pindexNew->pprev->GetBlockHash();
+                        CDiskBlockPos pos;
+                        if (!FindUndoPos(state, pindexNew->nFile, pos, ::GetSerializeSize(blockundo, SER_DISK, CLIENT_VERSION) + 40))
+                        {
+                            LOGA("SyncStorage(): FindUndoPos failed");
+                            assert(false);
+                        }
+                        uint256 prevHash;
+                        if (pindexNew->pprev) // genesis block prev hash is 0
+                        {
+                            prevHash = pindexNew->pprev->GetBlockHash();
+                        }
+                        else
+                        {
+                            prevHash.SetNull();
+                        }
+                        if (!UndoWriteToDisk(blockundo, pos, prevHash, chainparams.MessageStart()))
+                        {
+                            LOGA("SyncStorage(): Failed to write undo data");
+                            assert(false);
+                        }
+                        // update nUndoPos in block index
+                        pindexNew->nUndoPos = pos.nPos;
                     }
                     else
                     {
-                        prevHash.SetNull();
+                        pindexNew->nStatus &= BLOCK_HAVE_UNDO;
                     }
-                    if (!UndoWriteToDisk(blockundo, pos, prevHash, chainparams.MessageStart()))
-                    {
-                        LOGA("SyncStorage(): Failed to write undo data");
-                        assert(false);
-                    }
-                    // update nUndoPos in block index
-                    pindexNew->nUndoPos = pos.nPos;
                 }
-                if(pindexNew->nStatus & BLOCK_HAVE_DATA && pindexNew->nStatus & BLOCK_HAVE_UNDO && pindexNew->nUndoPos != 0)
+                else
+                {
+                    pindexNew->nStatus &= BLOCK_HAVE_UNDO;
+                }
+                if(pindexNew->nStatus & BLOCK_HAVE_DATA && pindexNew->nStatus & BLOCK_HAVE_UNDO)
                 {
                     if(pindexNew->nHeight > bestHeight)
                     {
