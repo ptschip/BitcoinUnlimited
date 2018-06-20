@@ -3837,15 +3837,15 @@ bool static LoadBlockIndexDB()
             if((*it) < 0 )
             {
                 // a negative file means the block is in the blockdb not a sequential file
-                // contineu to prevent checking for a file we know doesnt exist
+                // continue to prevent checking for a file we know doesnt exist
                 continue;
             }
             CDiskBlockPos pos(*it, 0);
             fs::path path = GetBlockPosFilename(pos, "blk");
             if (!fs::exists(path))
             {
-                LOGA("missing path = %s \n", path.string().c_str());
-                /** We fail here when switching from db to seq */
+                fs::file_status s = fs::status(path);
+                LOGA("missing path = %s which has status of %u \n", path.string().c_str(), s.type());
                 return false;
             }
         }
