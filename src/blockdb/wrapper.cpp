@@ -127,6 +127,27 @@ void SyncStorage(const CChainParams &chainparams)
         {
             if(item.second == chainparams.GetConsensus().hashGenesisBlock)
             {
+                CBlock &block = const_cast<CBlock &>(chainparams.GenesisBlock());
+                // Start new block file
+                unsigned int nBlockSize = ::GetSerializeSize(block, SER_DISK, CLIENT_VERSION);
+                CDiskBlockPos blockPos;
+                CValidationState state;
+                if (!FindBlockPos(state, blockPos, nBlockSize + 8, 0, block.GetBlockTime(), false))
+                {
+                    LOGA("SyncStorage(): FindBlockPos failed");
+                    assert(false);
+                }
+                if (!WriteBlockToDisk(block, blockPos, chainparams.MessageStart()))
+                {
+                    LOGA("SyncStorage(): writing genesis block to disk failed");
+                    assert(false);
+                }
+                CBlockIndex *pindex = AddToBlockIndex(block);
+                if (!ReceivedBlockTransactions(block, state, pindex, blockPos))
+                {
+                    LOGA("SyncStorage(): genesis block not accepted");
+                    assert(false);
+                }
                 continue;
             }
             BlockMap::iterator it;
