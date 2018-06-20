@@ -3064,9 +3064,12 @@ bool FindBlockPos(CValidationState &state,
     uint64_t nTime,
     bool fKnown = false)
 {
-    // No need for finding block pos if we're only using leveldb for block storage.
+    // nDataPos for blockdb is a flag, just set to 1 to indicate we have that data. nFile is unused.
     if (BLOCK_DB_MODE == DB_BLOCK_STORAGE)
+    {
+        pos.nPos = 1;
         return true;
+    }
 
     LOCK(cs_LastBlockFile);
 
@@ -3138,8 +3141,10 @@ bool FindBlockPos(CValidationState &state,
 
 bool FindUndoPos(CValidationState &state, int nFile, CDiskBlockPos &pos, unsigned int nAddSize)
 {
+    // nUndoPos for blockdb is a flag, set it to 1 to inidicate we have the data
     if(BLOCK_DB_MODE == DB_BLOCK_STORAGE)
     {
+        pos.nPos = 1;
         return true;
     }
 
