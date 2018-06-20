@@ -100,11 +100,11 @@ struct CDiskBlockPos
     void SetNull()
     {
         nFile = -1;
-        nPos = -1;
+        nPos = 0;
     }
     bool IsNull() const
     {
-        return (nFile == -1 || nPos == -1);
+        return (nFile == -1);
     }
     std::string ToString() const { return strprintf("CBlockDiskPos(nFile=%i, nPos=%i)", nFile, nPos); }
 };
@@ -203,15 +203,17 @@ public:
     //! (memory only) Sequential id assigned to distinguish order in which blocks are received.
     uint32_t nSequenceId;
 
+
+
     void SetNull()
     {
         phashBlock = NULL;
         pprev = NULL;
         pskip = NULL;
         nHeight = 0;
-        nFile = -1;
-        nDataPos = -1;
-        nUndoPos = -1;
+        nFile = 0;
+        nDataPos = 0;
+        nUndoPos = 0;
         nChainWork = arith_uint256();
         nTx = 0;
         nChainTx = 0;
@@ -386,11 +388,11 @@ public:
         READWRITE(VARINT(nStatus));
         READWRITE(VARINT(nTx));
         if (nStatus & (BLOCK_HAVE_DATA | BLOCK_HAVE_UNDO))
-            READWRITE(nFile);
+            READWRITE(VARINT(nFile));
         if (nStatus & BLOCK_HAVE_DATA)
-            READWRITE(nDataPos);
+            READWRITE(VARINT(nDataPos));
         if (nStatus & BLOCK_HAVE_UNDO)
-            READWRITE(nUndoPos);
+            READWRITE(VARINT(nUndoPos));
 
         // block header
         READWRITE(this->nVersion);

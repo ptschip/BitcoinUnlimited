@@ -242,6 +242,8 @@ void Shutdown()
         pcoinsdbview = NULL;
         delete pblocktree;
         pblocktree = NULL;
+        delete pblocktreeother;
+        pblocktreeother = NULL;
         delete pblockdb;
         pblockdb = NULL;
         delete pblockundodb;
@@ -1010,11 +1012,21 @@ bool AppInit2(Config &config, boost::thread_group &threadGroup, CScheduler &sche
                 delete pcoinsdbview;
                 delete pcoinscatcher;
                 delete pblocktree;
+                delete pblocktreeother;
                 delete pblockdb;
                 delete pblockundodb;
 
                 uiInterface.InitMessage(_("Opening Block database..."));
-                pblocktree = new CBlockTreeDB(nBlockTreeDBCache, false, fReindex);
+                if(BLOCK_DB_MODE == DB_BLOCK_STORAGE)
+                {
+                    pblocktree = new CBlockTreeDB(nBlockTreeDBCache, "blockdb", false, fReindex);
+                    pblocktreeother = new CBlockTreeDB(nBlockTreeDBCache, "blocks", false, fReindex);
+                }
+                else
+                {
+                    pblocktree = new CBlockTreeDB(nBlockTreeDBCache, "blocks", false, fReindex);
+                    pblocktreeother = new CBlockTreeDB(nBlockTreeDBCache, "blockdb", false, fReindex);
+                }
                 pblockdb = new CBlockDB("blocks", nBlockTreeDBCache, false, false);
                 pblockundodb = new CBlockDB("undo", nBlockTreeDBCache, false, false);
                 uiInterface.InitMessage(_("Opening UTXO database..."));

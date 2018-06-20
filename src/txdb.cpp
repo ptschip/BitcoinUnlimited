@@ -6,7 +6,6 @@
 
 #include "txdb.h"
 #include "blockdb/wrapper.h"
-#include "chain.h"
 #include "chainparams.h"
 #include "hash.h"
 #include "main.h"
@@ -197,8 +196,8 @@ bool CCoinsViewDB::BatchWrite(CCoinsMap &mapCoins,
 }
 
 size_t CCoinsViewDB::EstimateSize() const { return db.EstimateSize(DB_COIN, (char)(DB_COIN + 1)); }
-CBlockTreeDB::CBlockTreeDB(size_t nCacheSize, bool fMemory, bool fWipe)
-    : CDBWrapper(GetDataDir() / "blocks" / "index", nCacheSize, fMemory, fWipe)
+CBlockTreeDB::CBlockTreeDB(size_t nCacheSize, string folder, bool fMemory, bool fWipe)
+    : CDBWrapper(GetDataDir() / folder.c_str() / "index", nCacheSize, fMemory, fWipe)
 {
 }
 
@@ -316,7 +315,7 @@ bool CBlockTreeDB::ReadFlag(const std::string &name, bool &fValue)
     return true;
 }
 
-bool CBlockTreeDB::FindBlockIndex(uint256 blockhash, CBlockIndex& pindex)
+bool CBlockTreeDB::FindBlockIndex(uint256 blockhash, CDiskBlockIndex* pindex)
 {
     boost::scoped_ptr<CDBIterator> pcursor(NewIterator());
     pcursor->Seek(make_pair(DB_BLOCK_INDEX, uint256()));
@@ -329,26 +328,11 @@ bool CBlockTreeDB::FindBlockIndex(uint256 blockhash, CBlockIndex& pindex)
         {
             if(key.second == blockhash)
             {
-                CDiskBlockIndex diskindex;
-                if (pcursor->GetValue(diskindex))
+                if (pcursor->GetValue(*pindex))
                 {
-                    // Construct block index object
-                    // dont store the phash or pprev in pindex because we dont have pointers to them
-                    uint256 blockhash = diskindex.GetBlockHash();
-                    pindex.nHeight = diskindex.nHeight;
-                    pindex.nFile = diskindex.nFile;
-                    pindex.nDataPos = diskindex.nDataPos;
-                    pindex.nUndoPos = diskindex.nUndoPos;
-                    pindex.nVersion = diskindex.nVersion;
-                    pindex.hashMerkleRoot = diskindex.hashMerkleRoot;
-                    pindex.nTime = diskindex.nTime;
-                    pindex.nBits = diskindex.nBits;
-                    pindex.nNonce = diskindex.nNonce;
-                    pindex.nStatus = diskindex.nStatus;
-                    pindex.nTx = diskindex.nTx;
-                    if (!CheckProofOfWork(blockhash, pindex.nBits, Params().GetConsensus()))
+                    if (!CheckProofOfWork(blockhash, pindex->nBits, Params().GetConsensus()))
                     {
-                        return error("LoadBlockIndex(): CheckProofOfWork failed: %s", pindex.ToString());
+                        return error("LoadBlockIndex(): CheckProofOfWork failed: %s", pindex->ToString());
                     }
                     return true;
                 }
@@ -416,7 +400,38 @@ bool CBlockTreeDB::LoadBlockIndexGuts()
             break;
         }
     }
+    return true;
+}
 
+bool CBlockTreeDB::GetSortedHashIndex(std::vector<std::pair<int, uint256> >& hashesByHeight)
+{
+    boost::scoped_ptr<CDBIterator> pcursor(NewIterator());
+    pcursor->Seek(make_pair(DB_BLOCK_INDEX, uint256()));
+    // Load mapBlockIndex
+    while (pcursor->Valid())
+    {
+        boost::this_thread::interruption_point();
+        std::pair<char, uint256> key;
+        if (pcursor->GetKey(key) && key.first == DB_BLOCK_INDEX)
+        {
+            CDiskBlockIndex diskindex;
+            if (pcursor->GetValue(diskindex))
+            {
+                // Construct block index object
+                hashesByHeight.push_back(std::make_pair(diskindex.nHeight, diskindex.GetBlockHash()));
+                pcursor->Next();
+            }
+            else
+            {
+                return error("LoadBlockIndex() : failed to read value");
+            }
+        }
+        else
+        {
+            break;
+        }
+    }
+    std::sort(hashesByHeight.begin(), hashesByHeight.end());
     return true;
 }
 

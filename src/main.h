@@ -507,6 +507,11 @@ bool ReconsiderBlock(CValidationState &state, CBlockIndex *pindex);
 
 bool FindBlockPos(CValidationState &state, CDiskBlockPos &pos, unsigned int nAddSize, unsigned int nHeight, uint64_t nTime, bool fKnown);
 
+/** Mark a block as having its data received and checked (up to BLOCK_VALID_TRANSACTIONS). */
+bool ReceivedBlockTransactions(const CBlock &block, CValidationState &state, CBlockIndex *pindexNew, CDiskBlockPos &pos);
+
+CBlockIndex *AddToBlockIndex(const CBlockHeader &block);
+
 /** The currently-connected chain of blocks (protected by cs_main). */
 extern CChain chainActive;
 
@@ -515,6 +520,9 @@ extern CCoinsViewCache *pcoinsTip;
 
 /** Global variable that points to the active block tree (protected by cs_main) */
 extern CBlockTreeDB *pblocktree;
+/** Global variable that points to the block tree on the inactive storage method (protected by cs_main) */
+extern CBlockTreeDB *pblocktreeother;
+
 extern std::vector<CBlockFileInfo> vinfoBlockFile;
 extern int nLastBlockFile;
 

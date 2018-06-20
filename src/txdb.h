@@ -153,7 +153,7 @@ private:
 class CBlockTreeDB : public CDBWrapper
 {
 public:
-    CBlockTreeDB(size_t nCacheSize, bool fMemory = false, bool fWipe = false);
+    CBlockTreeDB(size_t nCacheSize, std::string folder, bool fMemory = false, bool fWipe = false);
 
 private:
     CBlockTreeDB(const CBlockTreeDB &);
@@ -171,8 +171,9 @@ public:
     bool WriteTxIndex(const std::vector<std::pair<uint256, CDiskTxPos> > &list);
     bool WriteFlag(const std::string &name, bool fValue);
     bool ReadFlag(const std::string &name, bool &fValue);
-    bool FindBlockIndex(uint256 blockhash, CBlockIndex& index);
+    bool FindBlockIndex(uint256 blockhash, CDiskBlockIndex* index);
     bool LoadBlockIndexGuts();
+    bool GetSortedHashIndex(std::vector<std::pair<int, uint256> >& hashesByHeight);
 };
 
 /** Global variable that points to the coins database */
