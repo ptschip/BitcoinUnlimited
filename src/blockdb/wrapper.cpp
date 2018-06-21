@@ -108,7 +108,6 @@ bool DetermineStorageSync()
     return true;
 }
 
-// use this sparingly, this function will be very disk intensive
 void SyncStorage(const CChainParams &chainparams)
 {
     if(BLOCK_DB_MODE == SEQUENTIAL_BLOCK_FILES)
@@ -118,11 +117,6 @@ void SyncStorage(const CChainParams &chainparams)
         CValidationState state;
         int bestHeight = 0;
         CBlockIndex* pindexBest = new CBlockIndex();
-        if(mapBlockIndex.size() > hashesByHeight.size())
-        {
-            // we dont need to sync
-            return;
-        }
         for (const std::pair<int, CDiskBlockIndex> &item : hashesByHeight)
         {
             if(item.second.GetBlockHash() == chainparams.GetConsensus().hashGenesisBlock)
