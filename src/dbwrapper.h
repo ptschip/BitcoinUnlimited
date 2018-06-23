@@ -13,11 +13,21 @@
 #include "utilstrencodings.h"
 #include "version.h"
 
+#include <leveldb/cache.h>
 #include <leveldb/db.h>
 #include <leveldb/write_batch.h>
 
 static const size_t DBWRAPPER_PREALLOC_KEY_SIZE = 64;
 static const size_t DBWRAPPER_PREALLOC_VALUE_SIZE = 1024;
+
+// DBWrapper leveldb options that can be modified rather than using the defaults defined in GetDefaultOptions().
+struct COverrideOptions
+{
+    size_t *max_file_size = nullptr;
+    size_t *block_size = nullptr;
+    size_t *write_buffer_size = nullptr;
+    leveldb::Cache *block_cache = nullptr;
+};
 
 class dbwrapper_error : public std::runtime_error
 {
@@ -230,7 +240,8 @@ public:
         size_t nCacheSize,
         bool fMemory = false,
         bool fWipe = false,
-        bool obfuscate = false);
+        bool obfuscate = false,
+        COverrideOptions *pOverrideOptions = nullptr);
     ~CDBWrapper();
 
     template <typename K, typename V>
