@@ -68,17 +68,14 @@ static void OverrideOptions(leveldb::Options &_options, COverrideOptions *_pOver
         return;
 
     // If an ovverride option was defined and is valid then modify the corresponding level db option.
-    if (_pOverride->max_file_size != nullptr)
-        _options.max_file_size = *_pOverride->max_file_size;
+    if (_pOverride->max_file_size > 0)
+        _options.max_file_size = _pOverride->max_file_size;
 
-    if (_pOverride->block_size != nullptr)
-        _options.block_size = *_pOverride->block_size;
+    if (_pOverride->block_size  > 0)
+        _options.block_size = _pOverride->block_size;
 
-    if (_pOverride->block_cache != nullptr)
-        _options.block_cache = _pOverride->block_cache;
-
-    if (_pOverride->write_buffer_size != nullptr)
-        _options.write_buffer_size = *_pOverride->write_buffer_size;
+    if (_pOverride->write_buffer_size > 0)
+        _options.write_buffer_size = _pOverride->write_buffer_size;
 }
 
 CDBWrapper::CDBWrapper(const fs::path &path,
@@ -95,7 +92,7 @@ CDBWrapper::CDBWrapper(const fs::path &path,
     syncoptions.sync = true;
     options = GetDefaultOptions(nCacheSize);
 
-    // Modifiy default database options
+    // Modify default database options
     OverrideOptions(options, pOverride);
 
     if (fMemory)
@@ -105,6 +102,7 @@ CDBWrapper::CDBWrapper(const fs::path &path,
     }
     else
     {
+        LOGA("fwipe \n");
         if (fWipe)
         {
             LOGA("Wiping LevelDB in %s\n", path.string());
