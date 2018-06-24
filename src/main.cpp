@@ -1464,7 +1464,7 @@ static DisconnectResult DisconnectBlock(const CBlock &block, const CBlockIndex *
         error("DisconnectBlock(): no undo data available");
         return DISCONNECT_FAILED;
     }
-    if (!UndoReadFromDisk(blockUndo, pos, pindex->pprev->GetBlockHash()))
+    if (!UndoReadFromDisk(blockUndo, pos, pindex->pprev->GetBlockHash(), pindex->GetBlockTime()))
     {
         error("DisconnectBlock(): failure reading undo data");
         return DISCONNECT_FAILED;
@@ -2066,7 +2066,7 @@ bool ConnectBlock(const CBlock &block,
             {
                 prevHash.SetNull();
             }
-            if (!UndoWriteToDisk(blockundo, pos, prevHash, chainparams.MessageStart()))
+            if (!UndoWriteToDisk(blockundo, pos, prevHash, pindex->GetBlockTime(), chainparams.MessageStart()))
             {
                 return AbortNode(state, "Failed to write undo data");
             }
@@ -3964,7 +3964,7 @@ bool CVerifyDB::VerifyDB(const CChainParams &chainparams, CCoinsView *coinsview,
             CDiskBlockPos pos = pindex->GetUndoPos();
             if (!pos.IsNull())
             {
-                if (!UndoReadFromDisk(undo, pos, pindex->pprev->GetBlockHash()))
+                if (!UndoReadFromDisk(undo, pos, pindex->pprev->GetBlockHash(), pindex->GetBlockTime()))
                     return error("VerifyDB(): *** found bad undo data at %d, hash=%s\n", pindex->nHeight,
                         pindex->GetBlockHash().ToString());
             }
