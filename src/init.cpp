@@ -1036,7 +1036,8 @@ bool AppInit2(Config &config, boost::thread_group &threadGroup, CScheduler &sche
                 COverrideOptions override;
                 override.max_file_size = 128 << 20;
                 pblockdb = new CBlockDB("blocks", nBlockDBCache, false, false, false, &override);
-                pblockundodb = new CBlockDB("undo", nBlockUndoDBCache, false, false);
+                override.max_file_size = 20 << 20;
+                pblockundodb = new CBlockDB("undo", nBlockUndoDBCache, false, false, false, &override);
 
                 uiInterface.InitMessage(_("Opening UTXO database..."));
                 pcoinsdbview = new CCoinsViewDB(nCoinDBCache, false, fReindex);
