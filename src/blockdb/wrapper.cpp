@@ -586,6 +586,7 @@ bool FlushStateToDisk(CValidationState &state, FlushStateMode mode)
         // Write blocks and block index to disk.
         if (fDoFullFlush || fPeriodicWrite)
         {
+LOGA("do full flush1\n");
             // Depend on nMinDiskSpace to ensure we can write block index
             if (!CheckDiskSpace(0))
             {
@@ -617,6 +618,7 @@ bool FlushStateToDisk(CValidationState &state, FlushStateMode mode)
                 // we write different info depending on block storage system
                 if(BLOCK_DB_MODE == SEQUENTIAL_BLOCK_FILES)
                 {
+LOGA("entering flush state to disk dbblockstorage1\n");
                     if (!pblocktree->WriteBatchSync(vFiles, nLastBlockFile, vBlocks))
                     {
                         return AbortNode(state, "Files to write to block index database");
@@ -624,6 +626,8 @@ bool FlushStateToDisk(CValidationState &state, FlushStateMode mode)
                 }
                 else if(BLOCK_DB_MODE == DB_BLOCK_STORAGE)
                 {
+LOGA("entering flush state to disk dbblockstorage2\n");
+
                     // vFiles should be empty for a LEVELDB call so insert a blank vector instead
                     std::vector<std::pair<int, const CBlockFileInfo *> > vFilesEmpty;
                     // pass in -1 for the last block file since we dont use it for level, it will be ignored in the function if it is -1337
@@ -650,6 +654,8 @@ bool FlushStateToDisk(CValidationState &state, FlushStateMode mode)
         // Flush best chain related state. This can only be done if the blocks / block index write was also done.
         if (fDoFullFlush)
         {
+LOGA("do full flush2\n");
+
             // Typical Coin structures on disk are around 48 bytes in size.
             // Pushing a new one to the database can cause it to be written
             // twice (once in the log, and once in the tables). This is already

@@ -713,8 +713,8 @@ void CacheSizeCalculations(int64_t _nTotalCache,
        _nBlockUndoDBcache = _nTotalCache * 0.01;
        if (_nBlockUndoDBcache < _nBlockTreeDBCache)
            _nBlockUndoDBcache = _nBlockTreeDBCache;
-       else if (_nBlockUndoDBcache > 20 << 20)
-           _nBlockUndoDBcache = 20 << 20;
+       else if (_nBlockUndoDBcache > 64 << 20)
+           _nBlockUndoDBcache = 64 << 20;
     }
 
     // use 25%-50% of the remainder for the utxo leveldb disk cache
