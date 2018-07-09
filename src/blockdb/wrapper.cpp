@@ -19,6 +19,8 @@ extern CCriticalSection cs_LastBlockFile;
 extern std::set<int> setDirtyFileInfo;
 extern std::multimap<CBlockIndex *, CBlockIndex *> mapBlocksUnlinked;
 
+static uint32_t ITERATIONS_BEFORE_FLUSHSTATE = 10000;
+
 /**
   * Config param to determine what DB type we are using
   */
@@ -66,6 +68,8 @@ bool DetermineStorageSync()
 
 void SyncStorage(const CChainParams &chainparams)
 {
+    uint32_t nIterations = 0;
+
     if (BLOCK_DB_MODE == SEQUENTIAL_BLOCK_FILES)
     {
         std::vector<std::pair<int, CDiskBlockIndex> > hashesByHeight;
@@ -201,6 +205,10 @@ void SyncStorage(const CChainParams &chainparams)
                 }
             }
             setDirtyBlockIndex.insert(index);
+
+            // We need to occassionally flush state which then clears the setDirtyBlockIndex.
+            if (nIterations++ > ITERATIONS_BEFORE_FLUSHSTATE)
+                FlushStateToDisk();
         }
 
         // if bestHeight != 0 then pindexBest has been initialized and we can update the best block.
@@ -321,6 +329,10 @@ void SyncStorage(const CChainParams &chainparams)
                 }
             }
             setDirtyBlockIndex.insert(index);
+
+            // We need to occassionally flush state which then clears the setDirtyBlockIndex.
+            if (nIterations++ > ITERATIONS_BEFORE_FLUSHSTATE)
+                FlushStateToDisk();
         }
 
         // if bestHeight != 0 then pindexBest has been initialized and we can update the best block.
