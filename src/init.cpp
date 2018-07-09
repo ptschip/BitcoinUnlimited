@@ -1074,6 +1074,18 @@ bool AppInit2(Config &config, boost::thread_group &threadGroup, CScheduler &sche
                     break;
                 }
 
+                // Once the block index is loaded and the check for any upgrade or downgrade to blockdb is complete,
+                // we can close any databases that are no longer needed.
+                delete pblocktreeother;
+                pblocktreeother = nullptr;
+                if (BLOCK_DB_MODE == SEQUENTIAL_BLOCK_FILES)
+                {
+                    delete pblockdb;
+                    pblockdb = nullptr;
+                    delete pblockundodb;
+                    pblockundodb = nullptr;
+                }
+
                 // If the loaded chain has a wrong genesis, bail out immediately
                 // (we're likely using a testnet datadir, or the other way around).
                 if (!mapBlockIndex.empty() && mapBlockIndex.count(chainparams.GetConsensus().hashGenesisBlock) == 0)
