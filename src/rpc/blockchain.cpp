@@ -862,7 +862,6 @@ UniValue getblockchaininfo(const UniValue &params, bool fHelp)
     softforks.push_back(SoftForkDesc("bip66", 3, tip, consensusParams));
     softforks.push_back(SoftForkDesc("bip65", 4, tip, consensusParams));
     // bip135 begin : add all the configured forks
-    assert(Consensus::MAX_VERSION_BITS_DEPLOYMENTS <= VERSIONBITS_NUM_BITS);
     for (int i = 0; i < Consensus::MAX_VERSION_BITS_DEPLOYMENTS; i++)
     {
         Consensus::DeploymentPos bit = static_cast<Consensus::DeploymentPos>(i);

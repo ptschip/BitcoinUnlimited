@@ -66,10 +66,11 @@ BOOST_AUTO_TEST_CASE(forkscsv_read_and_dumpforks_test)
 BOOST_AUTO_TEST_CASE(forkscsv_validation_test)
 {
     // bit number
-    for (int num = 0; num < VERSIONBITS_NUM_BITS; num++) {
+    for (int num = 0; num < Consensus::MAX_VERSION_BITS_DEPLOYMENTS; num++)
+    {
         BOOST_CHECK(ValidateBit(num));
     }
-    BOOST_CHECK(!ValidateBit(VERSIONBITS_NUM_BITS + 1));
+    BOOST_CHECK(!ValidateBit(Consensus::MAX_VERSION_BITS_DEPLOYMENTS + 1));
     BOOST_CHECK(!ValidateBit(-1));
 
     // network name
