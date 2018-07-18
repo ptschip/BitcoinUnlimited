@@ -5,6 +5,7 @@
 # Distributed under the MIT/X11 software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #
+import test_framework.loginit
 from test_framework.util import sync_blocks
 from test_framework.test_framework import ComparisonTestFramework
 from test_framework.util import *
@@ -134,7 +135,7 @@ class BIP135ForksTest(ComparisonTestFramework):
 
     def generate_blocks(self, number, version, test_blocks = []):
         for i in range(number):
-            #print ("generate_blocks: creating block on tip %x, height %d, time %d" % (self.tip, self.height, self.last_block_time + 1))
+            #logging.info ("generate_blocks: creating block on tip %x, height %d, time %d" % (self.tip, self.height, self.last_block_time + 1))
             block = create_block(self.tip, create_coinbase(self.height), self.last_block_time + 1)
             block.nVersion = version
             block.rehash()
@@ -152,10 +153,10 @@ class BIP135ForksTest(ComparisonTestFramework):
     def print_rpc_status(self):
         for f in self.defined_forks:
             info = self.nodes[0].getblockchaininfo()
-            print(info['bip135_forks'][f])
+            logging.info(info['bip135_forks'][f])
 
     def test_BIP135GraceConditions(self):
-        print("begin test_BIP135GraceConditions test")
+        logging.info("begin test_BIP135GraceConditions test")
         node = self.nodes[0]
         self.tip = int("0x" + node.getbestblockhash(), 0)
         header = node.getblockheader("0x%x" % self.tip)
@@ -202,7 +203,7 @@ class BIP135ForksTest(ComparisonTestFramework):
         yield TestInstance(test_blocks, sync_every_block=False)
         # check bits 7-15 , they should all be in LOCKED_IN
         bcinfo = self.nodes[0].getblockchaininfo()
-        print("checking all grace period forks are locked in")
+        logging.info("checking all grace period forks are locked in")
         for f in self.defined_forks:
             assert_equal(bcinfo['bip135_forks'][f]['status'], 'locked_in')
 
