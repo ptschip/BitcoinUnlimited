@@ -296,28 +296,6 @@ class BIP135ForksTest(ComparisonTestFramework):
                                          'active'  # locked_in
                                          ])
 
-        # check the ones supposed to activate at next+2 period
-        test_blocks = self.generate_blocks(10, 0x20000000)
-        yield TestInstance(test_blocks, sync_every_block=False)
-        bcinfo = self.nodes[0].getblockchaininfo()
-        activation_states = [ bcinfo['bip135_forks'][f]['status'] for f in self.defined_forks ]
-        assert_equal(activation_states, ['active',
-                                         'active',
-                                         'active',
-                                         'active',
-                                         'active',
-                                         'active',
-                                         'active',
-                                         'active',
-                                         'active',
-                                         'active',
-                                         'active',
-                                         'active',
-                                         'active',
-                                         'active',
-                                         'active'
-                                         ])
-
 
     def get_tests(self):
         '''
