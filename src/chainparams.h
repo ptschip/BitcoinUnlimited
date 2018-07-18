@@ -70,7 +70,7 @@ public:
     };
 
     const Consensus::Params &GetConsensus() const { return consensus; }
-    /** Modifiable consensus parameters added by bip135 */
+    /** Modifiable consensus parameters added by bip135, is not threadsafe, only use during initializtion */
     Consensus::Params &GetModifiableConsensus() { return consensus; }
     const CMessageHeader::MessageStartChars &MessageStart() const { return pchMessageStart; }
     const CMessageHeader::MessageStartChars &CashMessageStart() const { return pchCashMessageStart; }
