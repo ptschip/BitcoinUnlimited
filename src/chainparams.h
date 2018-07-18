@@ -145,6 +145,8 @@ CBlock CreateGenesisBlock(CScript prefix,
 /**
  * Return the currently selected parameters. Can be changed by reading in
  * some additional config files (e.g. CSV deployment data)
+ *
+ * This can only be used during initialization because modification is not threadsafe
  */
 CChainParams &ModifiableParams();
 
