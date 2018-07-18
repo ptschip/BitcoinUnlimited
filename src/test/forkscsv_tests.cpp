@@ -16,7 +16,7 @@ namespace utf = boost::unit_test;
 
 BOOST_FIXTURE_TEST_SUITE(forkscsv_tests, BasicTestingSetup)
 
-BOOST_AUTO_TEST_CASE(forkscsv_read_test)
+BOOST_AUTO_TEST_CASE(forkscsv_read_and_dumpforks_test)
 {
     CChainParams& params = ModifiableParams();
 
@@ -38,16 +38,8 @@ BOOST_AUTO_TEST_CASE(forkscsv_read_test)
             "main,1,segwit,1479168000,1510704000,2016,1916,0,0,true\n"
             "main,28,testdummy,1199145601,1230767999,2016,1916,0,0,false\n");
     BOOST_CHECK(ReadForksCsv("main", is_2, params.GetModifiableConsensus()));
-}
 
-/**
- * Test CSV dump of built-in defaults.
- * NOTE: the dump of 'main' data in this test depends on forkscsv_read_test
- * as long as the 'segwit' line is not built-in.
- * That is why an explicit dependency has been declared here.
- */
-BOOST_AUTO_TEST_CASE(forkscsv_dumpforks_test, * utf::depends_on("forkscsv_tests/forkscsv_read_test"))
-{
+    // dump forks testing
     BOOST_CHECK(NetworkDeploymentInfoCSV(CBaseChainParams::MAIN) == std::string(
             "# deployment info for network 'main':\n"
             "main,0,csv,1462060800,1493596800,2016,1916,0,0,true\n"
