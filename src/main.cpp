@@ -1735,7 +1735,7 @@ int32_t ComputeBlockVersion(const CBlockIndex *pindexPrev, const Consensus::Para
     {
         // bip135 begin
         // guard this because not all deployments have window/threshold
-        if (isConfiguredDeployment(params, i))
+        if (IsConfiguredDeployment(params, i))
         {
             ThresholdState state = VersionBitsState(pindexPrev, params, (Consensus::DeploymentPos)i, versionbitscache);
             // activate the bits that are STARTED or LOCKED_IN according to their deployments
@@ -2428,7 +2428,7 @@ void static CheckAndAlertUnknownVersionbits(const CChainParams &chainParams, con
     {
         for (int bit = 0; bit < VERSIONBITS_NUM_BITS; bit++)
         {
-            if (!isConfiguredDeployment(chainParams.GetConsensus(), bit))
+            if (!IsConfiguredDeployment(chainParams.GetConsensus(), bit))
             {
                 const CBlockIndex *iindex = pindex; // iterating index, reset to chain tip
                 // set count for this bit to 0

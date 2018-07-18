@@ -867,7 +867,7 @@ UniValue getblockchaininfo(const UniValue &params, bool fHelp)
     {
         Consensus::DeploymentPos bit = static_cast<Consensus::DeploymentPos>(i);
         const struct ForkDeploymentInfo &vbinfo = VersionBitsDeploymentInfo[bit];
-        if (isConfiguredDeployment(consensusParams, bit))
+        if (IsConfiguredDeployment(consensusParams, bit))
         {
             bip9_softforks.push_back(Pair(vbinfo.name, BIP9SoftForkDesc(consensusParams, bit)));
             bip135_forks.push_back(Pair(vbinfo.name, BIP135ForkDesc(consensusParams, bit)));

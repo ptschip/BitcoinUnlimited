@@ -152,7 +152,7 @@ CChainParams &ModifiableParams();
  * Returns true if a deployment is considered active on a particular network
  */
 
-bool isConfiguredDeployment(const Consensus::Params &consensusParams, const int bit);
+bool IsConfiguredDeployment(const Consensus::Params &consensusParams, const int bit);
 
 /**
  * Dump the fork deployment parameters for the given BIP70 chain name.
