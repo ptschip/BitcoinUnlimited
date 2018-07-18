@@ -806,7 +806,7 @@ UniValue getblockchaininfo(const UniValue &params, bool fHelp)
             "  ],\n"
             "  \"bip9_softforks\": {          (object) status of BIP9 softforks in progress\n"
             "     \"xxxx\" : {                (string) name of the softfork\n"
-            "        \"status\": \"xxxx\",      (string) one of \"defined\", \"started\", \"lockedin\", \"active\", "
+            "        \"status\": \"xxxx\",    (string) one of \"defined\", \"started\", \"lockedin\", \"active\", "
             "\"failed\"\n"
             "        \"bit\": xx,             (numeric) the bit, 0-28, in the block version field used to signal this "
             "soft fork\n"
