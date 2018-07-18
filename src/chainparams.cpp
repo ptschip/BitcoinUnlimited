@@ -509,6 +509,8 @@ void SelectParams(const std::string &network)
  */
 bool isConfiguredDeployment(const Consensus::Params &consensusParams, const int bit)
 {
+    DbgAssert(bit >= 0 && bit <= Consensus::MAX_VERSION_BITS_DEPLOYMENTS, return false);
+
     const Consensus::ForkDeployment *vdeployments = consensusParams.vDeployments;
     const struct ForkDeploymentInfo &vbinfo = VersionBitsDeploymentInfo[bit];
 
