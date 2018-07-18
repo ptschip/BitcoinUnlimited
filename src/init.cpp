@@ -938,8 +938,7 @@ bool AppInit2(Config &config, boost::thread_group &threadGroup, CScheduler &sche
         else
         {
             // Fail only when we've configured a file but it doesn't exit.
-            return InitError(strprintf(
-                _("Deployment configuration file '%s' not found"), ForksCsvFile));
+            return InitError(strprintf(_("Deployment configuration file '%s' not found"), ForksCsvFile));
         }
     }
     // bip135 end
