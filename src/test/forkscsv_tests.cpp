@@ -35,7 +35,6 @@ BOOST_AUTO_TEST_CASE(forkscsv_read_and_dumpforks_test)
     std::istringstream is_2(
             "# deployment info for network 'main':\n"
             "main,0,csv,1462060800,1493596800,2016,1916,0,0,true\n"
-            "main,1,segwit,1479168000,1510704000,2016,1916,0,0,true\n"
             "main,28,testdummy,1199145601,1230767999,2016,1916,0,0,false\n");
     BOOST_CHECK(ReadForksCsv("main", is_2, params.GetModifiableConsensus()));
 
@@ -43,7 +42,6 @@ BOOST_AUTO_TEST_CASE(forkscsv_read_and_dumpforks_test)
     BOOST_CHECK(NetworkDeploymentInfoCSV(CBaseChainParams::MAIN) == std::string(
             "# deployment info for network 'main':\n"
             "main,0,csv,1462060800,1493596800,2016,1916,0,0,true\n"
-            "main,1,segwit,1479168000,1510704000,2016,1916,0,0,true\n"
             "main,28,testdummy,1199145601,1230767999,2016,1916,0,0,false\n"));
 
     BOOST_CHECK(NetworkDeploymentInfoCSV(CBaseChainParams::UNL) == std::string(
@@ -96,7 +94,6 @@ BOOST_AUTO_TEST_CASE(forkscsv_validation_test)
     // fork name
     BOOST_CHECK(ValidateForkName("a_fork"));
     BOOST_CHECK(ValidateForkName("a fork"));
-    BOOST_CHECK(ValidateForkName("segwit"));
     BOOST_CHECK(!ValidateForkName(""));
 
     // window size
