@@ -131,6 +131,8 @@ BOOST_AUTO_TEST_CASE(forkscsv_validation_test)
 
     // starttime / timeout
     BOOST_CHECK(!ValidateTimes(0, 0));     // starttime must be strictly less than timeout
+    BOOST_CHECK(!ValidateTimes(-1, 100));  // starttime can not be less than zero
+    BOOST_CHECK(!ValidateTimes(1000, 999));// starttime must be strictly less than timeout
     BOOST_CHECK(ValidateTimes(0, 1));      // starttime must be strictly less than timeout
     BOOST_CHECK(ValidateTimes(100, 1001)); // starttime must be strictly less than timeout
     BOOST_CHECK(ValidateTimes(0, 1001));   // starttime must be strictly less than timeout
