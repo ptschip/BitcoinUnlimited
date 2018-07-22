@@ -72,13 +72,13 @@ private:
     /** Clear the block's state and prepare for assembling a new block */
     void resetBlock(const CScript &scriptPubKeyIn);
     /** Add a tx to the block */
-    void AddToBlock(CBlockTemplate *, CTxMemPool::txiter iter);
+    void AddToBlock(std::shared_ptr<CBlockTemplate> &pblocktemplate, CTxMemPool::txiter iter);
 
     // Methods for how to add transactions to a block.
     /** Add transactions based on modified feerate */
-    void addScoreTxs(CBlockTemplate *);
+    void addScoreTxs(std::shared_ptr<CBlockTemplate> &pblocktemplate);
     /** Add transactions based on tx "priority" */
-    void addPriorityTxs(CBlockTemplate *);
+    void addPriorityTxs(std::shared_ptr<CBlockTemplate> &pblocktemplate);
 
     // helper function for addScoreTxs and addPriorityTxs
     bool IsIncrementallyGood(uint64_t nExtraSize, unsigned int nExtraSigOps);

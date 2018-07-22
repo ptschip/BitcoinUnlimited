@@ -206,8 +206,8 @@ void BlockAssembler::CreateNewBlock(std::shared_ptr<CBlockTemplate> &pblocktempl
         nLockTimeCutoff =
             (STANDARD_LOCKTIME_VERIFY_FLAGS & LOCKTIME_MEDIAN_TIME_PAST) ? nMedianTimePast : pblock->GetBlockTime();
 
-        addPriorityTxs(pblocktemplate.get());
-        addScoreTxs(pblocktemplate.get());
+        addPriorityTxs(pblocktemplate);
+        addScoreTxs(pblocktemplate);
 
         nLastBlockTx = nBlockTx;
         nLastBlockSize = nBlockSize;
@@ -328,7 +328,7 @@ bool BlockAssembler::TestForBlock(CTxMemPool::txiter iter)
     return true;
 }
 
-void BlockAssembler::AddToBlock(CBlockTemplate *pblocktemplate, CTxMemPool::txiter iter)
+void BlockAssembler::AddToBlock(std::shared_ptr<CBlockTemplate> &pblocktemplate, CTxMemPool::txiter iter)
 {
     pblocktemplate->block.vtx.push_back(iter->GetSharedTx());
     pblocktemplate->vTxFees.push_back(iter->GetFee());
@@ -351,7 +351,7 @@ void BlockAssembler::AddToBlock(CBlockTemplate *pblocktemplate, CTxMemPool::txit
     }
 }
 
-void BlockAssembler::addScoreTxs(CBlockTemplate *pblocktemplate)
+void BlockAssembler::addScoreTxs(std::shared_ptr<CBlockTemplate> &pblocktemplate)
 {
     std::priority_queue<CTxMemPool::txiter, std::vector<CTxMemPool::txiter>, ScoreCompare> clearedTxs;
     CTxMemPool::setEntries waitSet;
@@ -426,7 +426,7 @@ void BlockAssembler::addScoreTxs(CBlockTemplate *pblocktemplate)
     }
 }
 
-void BlockAssembler::addPriorityTxs(CBlockTemplate *pblocktemplate)
+void BlockAssembler::addPriorityTxs(std::shared_ptr<CBlockTemplate> &pblocktemplate)
 {
     // How much of the block should be dedicated to high-priority transactions,
     // included regardless of the fees they pay
@@ -503,7 +503,7 @@ void BlockAssembler::addPriorityTxs(CBlockTemplate *pblocktemplate)
 
             // This tx was successfully added, so
             // add transactions that depend on this one to the priority queue to try again
-            BOOST_FOREACH (CTxMemPool::txiter child, mempool.GetMemPoolChildren(iter))
+            for (CTxMemPool::txiter child : mempool.GetMemPoolChildren(iter))
             {
                 waitPriIter wpiter = waitPriMap.find(child);
                 if (wpiter != waitPriMap.end())
