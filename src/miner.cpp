@@ -414,7 +414,7 @@ void BlockAssembler::addScoreTxs(std::shared_ptr<CBlockTemplate> &pblocktemplate
 
             // This tx was successfully added, so
             // add transactions that depend on this one to the priority queue to try again
-            BOOST_FOREACH (CTxMemPool::txiter child, mempool.GetMemPoolChildren(iter))
+            for (CTxMemPool::txiter child : mempool.GetMemPoolChildren(iter))
             {
                 if (waitSet.count(child))
                 {

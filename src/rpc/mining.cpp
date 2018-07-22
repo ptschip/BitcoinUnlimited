@@ -680,8 +680,8 @@ UniValue mkblocktemplate(const UniValue &params, CBlock *pblockOut)
     // BU get the height directly from the block because pindexPrev could change if another block has come in.
     result.push_back(Pair("height", (int64_t)(pblock->GetHeight())));
 
-  //  if (pblockOut != nullptr)
-  //      *pblockOut = *pblock;
+    if (pblockOut != nullptr)
+        *pblockOut = *pblock;
     return result;
 }
 
