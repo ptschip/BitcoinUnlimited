@@ -120,8 +120,8 @@ UniValue generateBlocks(boost::shared_ptr<CReserveScript> coinbaseScript,
     UniValue blockHashes(UniValue::VARR);
     while (nHeight < nHeightEnd)
     {
-        std::unique_ptr<CBlockTemplate> pblocktemplate(
-            BlockAssembler(Params()).CreateNewBlock(coinbaseScript->reserveScript));
+        std::shared_ptr<CBlockTemplate> pblocktemplate(new CBlockTemplate());
+        BlockAssembler(Params()).CreateNewBlock(pblocktemplate, coinbaseScript->reserveScript);
         if (!pblocktemplate.get())
             throw JSONRPCError(RPC_INTERNAL_ERROR, "Couldn't create new block");
         CBlock *pblock = &pblocktemplate->block;
@@ -496,7 +496,7 @@ UniValue mkblocktemplate(const UniValue &params, CBlock *pblockOut)
     // Update block
     static CBlockIndex *pindexPrev = NULL;
     static int64_t nStart = 0;
-    static CBlockTemplate *pblocktemplate = NULL;
+    static std::shared_ptr<CBlockTemplate> pblocktemplate(new CBlockTemplate());
     if (pindexPrev != chainActive.Tip() ||
         (mempool.GetTransactionsUpdated() != nTransactionsUpdatedLast && GetTime() - nStart > 5))
     {
@@ -509,11 +509,7 @@ UniValue mkblocktemplate(const UniValue &params, CBlock *pblockOut)
         nStart = GetTime();
 
         // Create new block
-        if (pblocktemplate)
-        {
-            delete pblocktemplate;
-            pblocktemplate = NULL;
-        }
+        pblocktemplate.reset(new CBlockTemplate());
 
         boost::shared_ptr<CReserveScript> coinbaseScript;
         GetMainSignals().ScriptForMining(coinbaseScript);
@@ -526,7 +522,7 @@ UniValue mkblocktemplate(const UniValue &params, CBlock *pblockOut)
         if (coinbaseScript->reserveScript.empty())
             throw JSONRPCError(RPC_INTERNAL_ERROR, "No coinbase script available (mining requires a wallet)");
 
-        pblocktemplate = BlockAssembler(Params()).CreateNewBlock(coinbaseScript->reserveScript);
+        BlockAssembler(Params()).CreateNewBlock(pblocktemplate, coinbaseScript->reserveScript);
         if (!pblocktemplate)
             throw JSONRPCError(RPC_OUT_OF_MEMORY, "Out of memory");
 
@@ -686,8 +682,8 @@ UniValue mkblocktemplate(const UniValue &params, CBlock *pblockOut)
     // BU get the height directly from the block because pindexPrev could change if another block has come in.
     result.push_back(Pair("height", (int64_t)(pblock->GetHeight())));
 
-    if (pblockOut != nullptr)
-        *pblockOut = *pblock;
+  //  if (pblockOut != nullptr)
+  //      *pblockOut = *pblock;
     return result;
 }
 

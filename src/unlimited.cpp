@@ -636,8 +636,8 @@ void static BitcoinMiner(const CChainParams &chainparams)
                 pindexPrev = chainActive.Tip();
             }
 
-            unique_ptr<CBlockTemplate> pblocktemplate(
-                BlockAssembler(chainparams).CreateNewBlock(coinbaseScript->reserveScript));
+            std::shared_ptr<CBlockTemplate> pblocktemplate(new CBlockTemplate());
+            BlockAssembler(chainparams).CreateNewBlock(pblocktemplate, coinbaseScript->reserveScript);
             if (!pblocktemplate.get())
             {
                 LOGA("Error in BitcoinMiner: Keypool ran out, please call keypoolrefill before restarting the "
