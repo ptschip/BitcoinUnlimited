@@ -605,7 +605,7 @@ static void addNodeRelayOptions(AllowedArgs &allowedArgs)
         .addArg("use-bloom-filter-targeting", optionalBool,
             _("Enable thin block bloom filter targeting which helps to keep the size of bloom filters to a minumum "
               "although it can impact performance. (default: 0)"))
-        .addArg("use-grapheneblocks", optionalBool, _("Enable graphene to speed up the relay of blocks (default: 1)"));
+        .addArg("use-grapheneblocks", optionalBool, _("Enable graphene to speed up the relay of blocks (default: 0)"));
 }
 
 static void addBlockCreationOptions(AllowedArgs &allowedArgs)
