@@ -2069,11 +2069,6 @@ extern UniValue getstructuresizes(const UniValue &params, bool fHelp)
 
     ret.push_back(Pair("mapBlockIndex", mapBlockIndex.size()));
     // CChain
-    {
-        LOCK(cs_xval);
-        ret.push_back(Pair("setPreVerifiedTxHash", setPreVerifiedTxHash.size()));
-        ret.push_back(Pair("setUnVerifiedOrphanTxHash", setUnVerifiedOrphanTxHash.size()));
-    }
     ret.push_back(Pair("mapLocalHost", mapLocalHost.size()));
     ret.push_back(Pair("CDoSManager::vWhitelistedRange", dosMan.vWhitelistedRange.size()));
     ret.push_back(Pair("mapInboundConnectionTracker", mapInboundConnectionTracker.size()));

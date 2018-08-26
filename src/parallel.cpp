@@ -652,10 +652,6 @@ void HandleBlockMessageThread(CNode *pfrom, const string strCommand, CBlockRef p
         if (nTotalThinBlocksInFlight == 0)
         {
             thindata.ResetThinBlockBytes();
-
-            LOCK(cs_xval);
-            setPreVerifiedTxHash.clear();
-            setUnVerifiedOrphanTxHash.clear();
         }
     }
     if (IsGrapheneBlockEnabled())
@@ -685,10 +681,6 @@ void HandleBlockMessageThread(CNode *pfrom, const string strCommand, CBlockRef p
         if (nTotalGrapheneBlocksInFlight == 0)
         {
             graphenedata.ResetGrapheneBlockBytes();
-
-            LOCK(cs_xval);
-            setPreVerifiedTxHash.clear();
-            setUnVerifiedOrphanTxHash.clear();
         }
     }
 

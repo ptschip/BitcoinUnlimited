@@ -1794,11 +1794,6 @@ bool ConnectBlock(const CBlock &block,
     int nOrphansChecked = 0;
     const arith_uint256 nStartingChainWork = chainActive.Tip()->nChainWork;
 
-    // Create a vector for storing hashes that will be deleted from the unverified and perverified txn sets.
-    // We will delete these hashes only if and when this block is the one that is accepted saving us the unnecessary
-    // repeated locking and unlocking of cs_xval.
-    std::vector<uint256> vHashesToDelete;
-
     // Section for boost scoped lock on the scriptcheck_mutex
     boost::thread::id this_id(boost::this_thread::get_id());
 
@@ -1828,8 +1823,7 @@ bool ConnectBlock(const CBlock &block,
 
 
         // Start checking Inputs
-        bool inOrphanCache;
-        bool inVerifiedCache;
+
         // When in parallel mode then unlock cs_main for this loop to give any other threads
         // a chance to process in parallel. This is crucial for parallel validation to work.
         // NOTE: the only place where cs_main is needed is if we hit PV->ChainWorkHasChanged, which
@@ -1895,18 +1889,6 @@ bool ConnectBlock(const CBlock &block,
                 // happen if this were a regular block or when a tx is found within the returning XThinblock.
                 uint256 hash = tx.GetHash();
                 {
-                    {
-                        LOCK(cs_xval);
-                        inOrphanCache = setUnVerifiedOrphanTxHash.count(hash);
-                        inVerifiedCache = setPreVerifiedTxHash.count(hash);
-                    } /* We don't want to hold the lock while inputs are being checked or we'll slow down the competing
-                         thread, if there is one */
-
-                    if ((inOrphanCache) || (!inVerifiedCache && !inOrphanCache))
-                    {
-                        if (inOrphanCache)
-                            nOrphansChecked++;
-
                         std::vector<CScriptCheck> vChecks;
                         bool fCacheResults = fJustCheck; /* Don't cache results if we're actually connecting blocks
                                                             (still consult the cache, though) */
@@ -1918,11 +1900,6 @@ bool ConnectBlock(const CBlock &block,
                         }
                         control.Add(vChecks);
                         nChecked++;
-                    }
-                    else
-                    {
-                        vHashesToDelete.push_back(hash);
-                    }
                 }
             }
 
@@ -2053,15 +2030,6 @@ bool ConnectBlock(const CBlock &block,
         }
     }
 
-    // Delete hashes from unverified and preverified sets that will no longer be needed after the block is accepted.
-    {
-        LOCK(cs_xval);
-        for (const uint256 &hash : vHashesToDelete)
-        {
-            setPreVerifiedTxHash.erase(hash);
-            setUnVerifiedOrphanTxHash.erase(hash);
-        }
-    }
     return true;
 }
 

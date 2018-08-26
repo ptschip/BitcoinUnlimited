@@ -27,7 +27,7 @@
 #include "utiltime.h"
 
 static bool DEFAULT_BLOOM_FILTER_TARGETING = true;
-static bool ReconstructBlock(CNode *pfrom, const bool fXVal, int &missingCount, int &unnecessaryCount);
+static bool ReconstructBlock(CNode *pfrom, int &missingCount, int &unnecessaryCount);
 
 CThinBlock::CThinBlock(const CBlock &block, CBloomFilter &filter)
 {
@@ -128,13 +128,6 @@ bool CThinBlock::HandleMessage(CDataStream &vRecv, CNode *pfrom)
 
 bool CThinBlock::process(CNode *pfrom, int nSizeThinBlock)
 {
-    // Xpress Validation - only perform xval if the chaintip matches the last blockhash in the thinblock
-    bool fXVal;
-    {
-        LOCK(cs_main);
-        fXVal = (header.hashPrevBlock == chainActive.Tip()->GetBlockHash()) ? true : false;
-    }
-
     thindata.ClearThinBlockData(pfrom);
     pfrom->nSizeThinBlock = nSizeThinBlock;
 
@@ -163,18 +156,17 @@ bool CThinBlock::process(CNode *pfrom, int nSizeThinBlock)
 
     {
         LOCK(orphanpool.cs);
-        LOCK(cs_xval);
         int missingCount = 0;
         int unnecessaryCount = 0;
 
-        if (!ReconstructBlock(pfrom, fXVal, missingCount, unnecessaryCount))
+        if (!ReconstructBlock(pfrom, missingCount, unnecessaryCount))
             return false;
 
         pfrom->thinBlockWaitingForTxns = missingCount;
         LOG(THIN, "Thinblock %s waiting for: %d, unnecessary: %d, total txns: %d received txns: %d peer=%s\n",
             pfrom->thinBlock.GetHash().ToString(), pfrom->thinBlockWaitingForTxns, unnecessaryCount,
             pfrom->thinBlock.vtx.size(), pfrom->mapMissingTx.size(), pfrom->GetLogName());
-    } // end lock orphanpool.cs, mempool.cs, cs_xval
+    } // end lock orphanpool.cs, mempool.cs
     LOG(THIN, "Total in memory thinblockbytes size is %ld bytes\n", thindata.GetThinBlockBytes());
 
     // Clear out data we no longer need before processing block.
@@ -209,9 +201,6 @@ bool CThinBlock::process(CNode *pfrom, int nSizeThinBlock)
         std::vector<CInv> vGetData;
         vGetData.push_back(CInv(MSG_BLOCK, header.GetHash()));
         pfrom->PushMessage(NetMsgType::GETDATA, vGetData);
-
-        LOCK(cs_xval);
-        setPreVerifiedTxHash.clear(); // Xpress Validation - clear the set since we do not do XVal on regular blocks
     }
 
     return true;
@@ -372,21 +361,13 @@ bool CXThinBlockTx::HandleMessage(CDataStream &vRecv, CNode *pfrom)
     }
     LOG(THIN, "Merkle Root check passed for %s peer=%s\n", inv.hash.ToString(), pfrom->GetLogName());
 
-    // Xpress Validation - only perform xval if the chaintip matches the last blockhash in the thinblock
-    bool fXVal;
-    {
-        LOCK(cs_main);
-        fXVal = (pfrom->thinBlock.hashPrevBlock == chainActive.Tip()->GetBlockHash()) ? true : false;
-    }
-
     int missingCount = 0;
     int unnecessaryCount = 0;
     // Look for each transaction in our various pools and buffers.
     // With xThinBlocks the vTxHashes contains only the first 8 bytes of the tx hash.
     {
         LOCK(orphanpool.cs);
-        LOCK(cs_xval);
-        if (!ReconstructBlock(pfrom, fXVal, missingCount, unnecessaryCount))
+        if (!ReconstructBlock(pfrom, missingCount, unnecessaryCount))
             return false;
     }
 
@@ -666,13 +647,6 @@ bool CXThinBlock::process(CNode *pfrom,
     if (PV->IsAlreadyValidating(pfrom->id))
         return false;
 
-    // Xpress Validation - only perform xval if the chaintip matches the last blockhash in the thinblock
-    bool fXVal;
-    {
-        LOCK(cs_main);
-        fXVal = (header.hashPrevBlock == chainActive.Tip()->GetBlockHash()) ? true : false;
-    }
-
     thindata.ClearThinBlockData(pfrom);
     pfrom->nSizeThinBlock = nSizeThinBlock;
 
@@ -710,7 +684,6 @@ bool CXThinBlock::process(CNode *pfrom,
             mapPartialTxHash[cheapHash] = mi.first;
         }
 
-        LOCK(cs_xval);
         mempool.queryHashes(memPoolHashes);
 
         for (uint64_t i = 0; i < memPoolHashes.size(); i++)
@@ -769,12 +742,12 @@ bool CXThinBlock::process(CNode *pfrom,
                 }
                 else
                 {
-                    if (!ReconstructBlock(pfrom, fXVal, missingCount, unnecessaryCount))
+                    if (!ReconstructBlock(pfrom, missingCount, unnecessaryCount))
                         return false;
                 }
             }
         }
-    } // End locking orphanpool.cs, mempool.cs and cs_xval
+    } // End locking orphanpool.cs, mempool.cs
     LOG(THIN, "Total in memory thinblockbytes size is %ld bytes\n", thindata.GetThinBlockBytes());
 
     // These must be checked outside of the mempool.cs lock or deadlock may occur.
@@ -846,10 +819,8 @@ bool CXThinBlock::process(CNode *pfrom,
     return true;
 }
 
-static bool ReconstructBlock(CNode *pfrom, const bool fXVal, int &missingCount, int &unnecessaryCount)
+static bool ReconstructBlock(CNode *pfrom, int &missingCount, int &unnecessaryCount)
 {
-    AssertLockHeld(cs_xval);
-
     // We must have all the full tx hashes by this point.  We first check for any duplicate
     // transaction ids.  This is a possible attack vector and has been used in the past.
     {
@@ -894,13 +865,6 @@ static bool ReconstructBlock(CNode *pfrom, const bool fXVal, int &missingCount, 
             if ((inMemPool && inMissingTx) || (inOrphanCache && inMissingTx))
                 unnecessaryCount++;
 
-            if (inOrphanCache)
-            {
-                ptx = orphanpool.mapOrphanTransactions[hash].ptx;
-                setUnVerifiedOrphanTxHash.insert(hash);
-            }
-            else if (inMemPool && fXVal)
-                setPreVerifiedTxHash.insert(hash);
             else if (inMissingTx)
                 ptx = pfrom->mapMissingTx[hash.GetCheapHash()];
         }
@@ -911,16 +875,13 @@ static bool ReconstructBlock(CNode *pfrom, const bool fXVal, int &missingCount, 
         // to see if we've exceeded any limits and if so clear out data and return.
         if (thindata.AddThinBlockBytes(nTxSize, pfrom) > maxAllowedSize)
         {
-            LEAVE_CRITICAL_SECTION(cs_xval); // maintain locking order with vNodes
             if (ClearLargestThinBlockAndDisconnect(pfrom))
             {
-                ENTER_CRITICAL_SECTION(cs_xval);
                 return error(
                     "Reconstructed block %s (size:%llu) has caused max memory limit %llu bytes to be exceeded, peer=%s",
                     pfrom->thinBlock.GetHash().ToString(), pfrom->nLocalThinBlockBytes, maxAllowedSize,
                     pfrom->GetLogName());
             }
-            ENTER_CRITICAL_SECTION(cs_xval);
         }
         if (pfrom->nLocalThinBlockBytes > maxAllowedSize)
         {
