@@ -40,7 +40,7 @@ void InitializeBlockStorage(const int64_t &_nBlockTreeDBCache,
         pblockdb = nullptr;
     }
 
-    else if (BLOCK_DB_MODE == LEVELDB_BLOCK_STORAGE) // BLOCK_DB_MODE 1
+    else if (BLOCK_DB_MODE == DB_BLOCK_STORAGE) // BLOCK_DB_MODE 1
     {
         pblocktree = new CBlockTreeDB(_nBlockTreeDBCache, "blockdb", false, fReindex);
         pblocktreeother = new CBlockTreeDB(_nBlockTreeDBCache, "blocks", false, fReindex);
@@ -61,11 +61,11 @@ void InitializeBlockStorage(const int64_t &_nBlockTreeDBCache,
 
 bool DetermineStorageSync()
 {
-    uint256 bestHashSeq = pcoinsdbview->GetBestBlock(SEQUENTIAL_BLOCK_FILES);
-    uint256 bestHashLev = pcoinsdbview->GetBestBlock(LEVELDB_BLOCK_STORAGE);
+    uint256 bestHashSeq = pcoinsdbview->GetBestBlockSeq();
+    uint256 bestHashLev = pcoinsdbview->GetBestBlockDb();
 
     // if we are using method X and method Y doesnt have any sync progress, assume nothing to sync
-    if (bestHashSeq.IsNull() && BLOCK_DB_MODE == LEVELDB_BLOCK_STORAGE)
+    if (bestHashSeq.IsNull() && BLOCK_DB_MODE == DB_BLOCK_STORAGE)
     {
         return false;
     }
@@ -92,7 +92,7 @@ bool DetermineStorageSync()
     {
         return false;
     }
-    if (BLOCK_DB_MODE == LEVELDB_BLOCK_STORAGE && bestIndexLev.nHeight >= bestIndexSeq.nHeight)
+    if (BLOCK_DB_MODE == DB_BLOCK_STORAGE && bestIndexLev.nHeight >= bestIndexSeq.nHeight)
     {
         return false;
     }
@@ -257,11 +257,11 @@ void SyncStorage(const CChainParams &chainparams)
         // if bestHeight != 0 then pindexBest has been initialized and we can update the best block.
         if (bestHeight != 0)
         {
-            pcoinsdbview->WriteBestBlock(pindexBest->GetBlockHash(), SEQUENTIAL_BLOCK_FILES);
+            pcoinsdbview->WriteBestBlockSeq(pindexBest->GetBlockHash());
         }
     }
 
-    else if (BLOCK_DB_MODE == LEVELDB_BLOCK_STORAGE)
+    else if (BLOCK_DB_MODE == DB_BLOCK_STORAGE)
     {
         std::vector<std::pair<int, CDiskBlockIndex> > indexByHeight;
         pblocktreeother->GetSortedHashIndex(indexByHeight);
@@ -401,7 +401,7 @@ void SyncStorage(const CChainParams &chainparams)
         // if bestHeight != 0 then pindexBest has been initialized and we can update the best block.
         if (bestHeight != 0)
         {
-            pcoinsdbview->WriteBestBlock(pindexBest->GetBlockHash(), LEVELDB_BLOCK_STORAGE);
+            pcoinsdbview->WriteBestBlockDb(pindexBest->GetBlockHash());
         }
     }
     FlushStateToDisk();
@@ -410,16 +410,20 @@ void SyncStorage(const CChainParams &chainparams)
 
 bool WriteBlockToDisk(const CBlock &block, CDiskBlockPos &pos, const CMessageHeader::MessageStartChars &messageStart)
 {
-    if (!pblockdb)
+    if (BLOCK_DB_MODE == SEQUENTIAL_BLOCK_FILES)
     {
         return WriteBlockToDiskSequential(block, pos, messageStart);
     }
-    return pblockdb->WriteBlock(block);
+    else if (BLOCK_DB_MODE == DB_BLOCK_STORAGE)
+    {
+        return pblockdb->WriteBlock(block);
+    }
+    return false;
 }
 
 bool ReadBlockFromDisk(CBlock &block, const CBlockIndex *pindex, const Consensus::Params &consensusParams)
 {
-    if (!pblockdb)
+    if (BLOCK_DB_MODE == SEQUENTIAL_BLOCK_FILES)
     {
         if (!ReadBlockFromDiskSequential(block, pindex->GetBlockPos(), consensusParams))
         {
@@ -432,18 +436,22 @@ bool ReadBlockFromDisk(CBlock &block, const CBlockIndex *pindex, const Consensus
         }
         return true;
     }
-    block.SetNull();
-    if (!pblockdb->ReadBlock(pindex, block))
+    else if (BLOCK_DB_MODE == DB_BLOCK_STORAGE)
     {
-        LOGA("failed to read block with hash %s from leveldb \n", pindex->GetBlockHash().GetHex().c_str());
-        return false;
+        block.SetNull();
+        if (!pblockdb->ReadBlock(pindex, block))
+        {
+            LOGA("failed to read block with hash %s from leveldb \n", pindex->GetBlockHash().GetHex().c_str());
+            return false;
+        }
+        if (block.GetHash() != pindex->GetBlockHash())
+        {
+            return error("ReadBlockFromDisk(CBlock&, CBlockIndex*): GetHash() doesn't match index for %s at %s",
+                pindex->ToString(), pindex->GetBlockPos().ToString());
+        }
+        return true;
     }
-    if (block.GetHash() != pindex->GetBlockHash())
-    {
-        return error("ReadBlockFromDisk(CBlock&, CBlockIndex*): GetHash() doesn't match index for %s at %s",
-            pindex->ToString(), pindex->GetBlockPos().ToString());
-    }
-    return true;
+    return false;
 }
 
 bool WriteUndoToDisk(const CBlockUndo &blockundo,
@@ -451,7 +459,7 @@ bool WriteUndoToDisk(const CBlockUndo &blockundo,
     const CBlockIndex *pindex,
     const CMessageHeader::MessageStartChars &messageStart)
 {
-    if (!pblockdb)
+    if (BLOCK_DB_MODE == SEQUENTIAL_BLOCK_FILES)
     {
         uint256 hashBlock;
         if (pindex)
@@ -464,7 +472,11 @@ bool WriteUndoToDisk(const CBlockUndo &blockundo,
         }
         return WriteUndoToDiskSequenatial(blockundo, pos, hashBlock, messageStart);
     }
-    return pblockdb->WriteUndo(blockundo, pindex);
+    else if (BLOCK_DB_MODE == DB_BLOCK_STORAGE)
+    {
+        return pblockdb->WriteUndo(blockundo, pindex);
+    }
+    return false;
 }
 
 /**
@@ -472,11 +484,15 @@ bool WriteUndoToDisk(const CBlockUndo &blockundo,
  */
 bool ReadUndoFromDisk(CBlockUndo &blockundo, const CDiskBlockPos &pos, const CBlockIndex *pindex)
 {
-    if (!pblockdb)
+    if (BLOCK_DB_MODE == SEQUENTIAL_BLOCK_FILES)
     {
         return ReadUndoFromDiskSequential(blockundo, pos, pindex->GetBlockHash());
     }
-    return pblockdb->ReadUndo(blockundo, pindex);
+    else if (BLOCK_DB_MODE == DB_BLOCK_STORAGE)
+    {
+        return pblockdb->ReadUndo(blockundo, pindex);
+    }
+    return false;
 }
 
 /* Calculate the block/rev files that should be deleted to remain under target*/
@@ -494,11 +510,11 @@ void FindFilesToPrune(std::set<int> &setFilesToPrune, uint64_t nPruneAfterHeight
     }
     uint64_t nLastBlockWeCanPrune = chainActive.Tip()->nHeight - MIN_BLOCKS_TO_KEEP;
 
-    if (!pblockdb)
+    if (BLOCK_DB_MODE == SEQUENTIAL_BLOCK_FILES)
     {
         FindFilesToPruneSequential(setFilesToPrune, nLastBlockWeCanPrune);
     }
-    else //if (pblockdb)
+    else if (BLOCK_DB_MODE == DB_BLOCK_STORAGE)
     {
         if (nDBUsedSpace < nPruneTarget + (pruneIntervalTweak.Value() * 1024 * 1024))
         {
@@ -594,21 +610,26 @@ bool FlushStateToDiskInternal(CValidationState &state,
 
 
             // we write different info depending on block storage system
-            if (!pblockdb) // sequential files
+            if (BLOCK_DB_MODE == SEQUENTIAL_BLOCK_FILES)
             {
                 if (!pblocktree->WriteBatchSync(vFiles, nLastBlockFile, vBlocks))
                 {
                     return AbortNode(state, "Files to write to block index database");
                 }
             }
-            else// if (pblockdb) //we are using a db, not sequential files
+            else if (BLOCK_DB_MODE == DB_BLOCK_STORAGE)
             {
-                // vFiles should be empty for a DB call so insert a blank vector instead
+                // vFiles should be empty for a LEVELDB call so insert a blank vector instead
                 std::vector<std::pair<int, const CBlockFileInfo *> > vFilesEmpty;
                 if (!pblocktree->WriteBatchSync(vFilesEmpty, 0, vBlocks))
                 {
                     return AbortNode(state, "Files to write to block index database");
                 }
+            }
+            else
+            {
+                // THIS SHOULD NEVER HAPPEN, it means we werent running in any recognizable block DB mode
+                assert(false);
             }
         }
         // Finally remove any pruned files, this will be empty for blockdb mode
