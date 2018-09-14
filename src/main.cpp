@@ -5412,6 +5412,9 @@ bool ProcessMessage(CNode *pfrom, std::string strCommand, CDataStream &vRecv, in
         {
             LOCK(pfrom->csRecvGetData);
             pfrom->vRecvGetData.insert(pfrom->vRecvGetData.end(), invDeque.begin(), invDeque.end());
+
+            if (pfrom->vRecvGetData.size() > 0)
+                pfrom->fMoreWork = true;
         }
     }
 
@@ -6492,11 +6495,18 @@ bool ProcessMessages(CNode *pfrom)
     bool fOk = true;
     bool gotWorkDone = false;
 
+    // Set these to true in case we don't aquire the lock. If we don't get the lock we
+    // can't be sure if there is work or not so we assume there still is work to do.
+    bool fMoreGetData = true;
+    bool fMoreRecv = true;
+
     {
         TRY_LOCK(pfrom->csRecvGetData, locked);
         if (locked && !pfrom->vRecvGetData.empty())
         {
             gotWorkDone |= ProcessGetData(pfrom, chainparams.GetConsensus(), pfrom->vRecvGetData);
+            if (pfrom->vRecvGetData.empty())
+                fMoreGetData = false;
         }
     }
 
@@ -6512,7 +6522,10 @@ bool ProcessMessages(CNode *pfrom)
                 break;
 
             if (pfrom->vRecvMsg.empty())
+            {
+                fMoreRecv = false;
                 break;
+            }
             CNetMessage &msgOnQ = pfrom->vRecvMsg.front();
             if (!msgOnQ.complete()) // end if an incomplete message is on the top
             {
@@ -6618,6 +6631,9 @@ bool ProcessMessages(CNode *pfrom)
         if (msgsProcessed > 2000)
             break; // let someone else do something periodically
     }
+
+    if (fMoreGetData || fMoreRecv)
+        pfrom->fMoreWork = true;
 
     return fOk;
 }

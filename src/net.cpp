@@ -622,8 +622,9 @@ bool CNode::ReceiveMsgBytes(const char *pch, unsigned int nBytes)
                     LOG(THIN | GRAPHENE, "Receive Queue: pushed %s to the front of the queue\n", strFirstMsgCommand);
                 }
             }
-            // BU: end
+
             msg.nTime = GetTimeMicros();
+            fMoreWork = true;
             messageHandlerCondition.notify_one();
         }
     }
@@ -2146,19 +2147,9 @@ void ThreadMessageHandler()
                 pnode->fDisconnect = true;
 
             // Discover if there's more work to be done
-            if (pnode->nSendSize < SendBufferSize())
+            if (pnode->nSendSize < SendBufferSize() && pnode->fMoreWork)
             {
-                { // If already locked some other thread is working on it, so no work for this thread
-                    TRY_LOCK(pnode->csRecvGetData, lockRecv);
-                    if (lockRecv && (!pnode->vRecvGetData.empty()))
-                        fSleep = false;
-                }
-                if (fSleep)
-                { // If already locked some other thread is working on it, so no work for this thread
-                    TRY_LOCK(pnode->cs_vRecvMsg, lockRecv);
-                    if (lockRecv && (!pnode->vRecvMsg.empty() && pnode->vRecvMsg[0].complete()))
-                        fSleep = false;
-                }
+                fSleep = false;
             }
             boost::this_thread::interruption_point();
 
@@ -2851,6 +2842,7 @@ CNode::CNode(SOCKET hSocketIn, const CAddress &addrIn, const std::string &addrNa
     nLocalThinBlockBytes = 0;
     nAvgBlkResponseTime = -1.0;
     nMaxBlocksInTransit = 16;
+    fMoreWork = true;
 
     nMisbehavior = 0;
     fShouldBan = false;

@@ -454,6 +454,10 @@ public:
 
     unsigned short addrFromPort;
 
+    // Used in the ThreadMessageHandler() to determine if there are still more messages which
+    // could be read from the queue.
+    std::atomic<bool> fMoreWork;
+
 protected:
     // Basic fuzz-testing
     void Fuzz(int nChance); // modifies ssSend
