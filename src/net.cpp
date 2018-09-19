@@ -2115,11 +2115,15 @@ void ThreadMessageHandler()
     boost::unique_lock<boost::mutex> lock(condition_mutex);
 
     std::atomic<int64_t> nLastNodeCountCheck{0};
-    int64_t nLastRotation = GetTime();
+
+    // Stagger the last rotation start times so all threads don't do their rotation at the same time.
+    static std::atomic<int> nThisNode{0};
+    int64_t nLastRotation = GetTime() - (nThisNode++ * 60);
+
     vector<CNode *> vNodesCopy;
     while (true)
     {
-            if (IsInitialBlockDownload() && GetTime() - nLastRotation > 60)
+            if (IsInitialBlockDownload() && GetTime() - nLastRotation > numMsgHandlerThreads.Value() * 60)
             {
                 LOCK(cs_vNodes);
 
@@ -2128,7 +2132,7 @@ void ThreadMessageHandler()
                 // By rotating vNodes evertime we send messages we can alleviate this problem.
                 // Rotate every 60 seconds so we don't do this too often.
                 nLastRotation = GetTime();
-                if (vNodes.size() > 0)
+                if (!vNodes.empty())
                 {
                     std::rotate(vNodes.begin(), vNodes.end() - 1, vNodes.end());
                     nLastRotation = GetTime();
@@ -2159,7 +2163,15 @@ void ThreadMessageHandler()
                     pnode->AddRef();
                 }
 
-                nLastNodeCountCheck = nLastNodeChange;
+                // Rotate this copy of vNodes according to how many message handler threads there are.  This way each thread
+                // has a different starting node and there will generally be less contention for locks.
+                if (!vNodes.empty())
+                {
+                    int nIndex = nThisNode / numMsgHandlerThreads.Value() * vNodes.size();
+                    nIndex = std::max((int)1, nIndex);
+                    std::rotate(vNodes.begin(), vNodes.end() - nIndex, vNodes.end());
+                }                
+                nLastNodeCountCheck = GetTimeMicros();
         }
 
         bool fSleep = true;
