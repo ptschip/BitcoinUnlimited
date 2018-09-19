@@ -2182,7 +2182,7 @@ void ThreadMessageHandler()
                 continue;
 
             // Receive messages from the net layer and put them into the receive queue.
-            if (!g_signals.ProcessMessages(pnode))
+            if (!g_signals.ProcessMessages(pnode, vNodesCopy))
                 pnode->Disconnect();
 
             // Discover if there's more work to be done
@@ -2522,8 +2522,25 @@ void NetCleanup()
 #endif
 }
 
-
 void RelayTransaction(const CTransactionRef &ptx, const bool fRespend)
+{
+    std::vector<CNode *> vNodesCopy;
+    {
+        LOCK(cs_vNodes);
+        vNodesCopy = vNodes;
+
+        // Take a ref for all nodes
+        for (CNode *pnode : vNodesCopy)
+            pnode->AddRef();
+    }
+    RelayTransaction(ptx, vNodesCopy, fRespend);
+
+    // Release refs
+    for (CNode *pnode : vNodesCopy)
+        pnode->Release();
+}
+
+void RelayTransaction(const CTransactionRef &ptx, const std::vector<CNode *> &vNodesCopy, const bool fRespend)
 {
     uint64_t len = ::GetSerializeSize(*ptx, SER_NETWORK, PROTOCOL_VERSION);
     if (len > maxTxSize.Value())
@@ -2547,8 +2564,8 @@ void RelayTransaction(const CTransactionRef &ptx, const bool fRespend)
         mapRelay.insert(std::make_pair(inv, ptx));
         vRelayExpiration.push_back(std::make_pair(GetTime() + 15 * 60, inv));
     }
-    LOCK(cs_vNodes);
-    for (CNode *pnode : vNodes)
+
+    for (CNode *pnode : vNodesCopy)
     {
         if (!pnode->fRelayTxes)
             continue;

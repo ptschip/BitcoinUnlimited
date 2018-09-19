@@ -276,7 +276,7 @@ bool LoadBlockIndex();
 /** Unload database information */
 void UnloadBlockIndex();
 /** Process protocol messages received from a given node */
-bool ProcessMessages(CNode *pfrom);
+bool ProcessMessages(CNode *pfrom, std::vector<CNode *> &vNodesCopy);
 /** Do we already have this transaction or has it been seen in a block */
 bool AlreadyHaveTx(const CInv &inv);
 /** Do we already have this block on disk */
@@ -289,7 +289,7 @@ bool AcceptBlockHeader(const CBlockHeader &block,
 bool FindUndoPos(CValidationState &state, int nFile, CDiskBlockPos &pos, unsigned int nAddSize);
 
 /** Process a single protocol messages received from a given node */
-bool ProcessMessage(CNode *pfrom, std::string strCommand, CDataStream &vRecv, int64_t nTimeReceived);
+bool ProcessMessage(CNode *pfrom, std::string strCommand, CDataStream &vRecv, int64_t nTimeReceived, std::vector<CNode *> &vNodesCopy);
 
 /**
  * Send queued protocol messages to be sent to a give node.

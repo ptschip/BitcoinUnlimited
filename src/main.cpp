@@ -4940,7 +4940,7 @@ static bool BasicThinblockChecks(CNode *pfrom, const CChainParams &chainparams)
     return true;
 }
 
-bool ProcessMessage(CNode *pfrom, std::string strCommand, CDataStream &vRecv, int64_t nTimeReceived)
+bool ProcessMessage(CNode *pfrom, std::string strCommand, CDataStream &vRecv, int64_t nTimeReceived, std::vector<CNode *> &vNodesCopy)
 {
     int64_t receiptTime = GetTime();
     const CChainParams &chainparams = Params();
@@ -5222,7 +5222,6 @@ bool ProcessMessage(CNode *pfrom, std::string strCommand, CDataStream &vRecv, in
             {
                 // Relay to a limited number of other nodes
                 {
-                    LOCK(cs_vNodes);
                     // Use deterministic randomness to send to the same nodes for 24 hours
                     // at a time so the addrKnowns of the chosen nodes prevent repeats
                     static uint256 hashSalt;
@@ -5233,7 +5232,7 @@ bool ProcessMessage(CNode *pfrom, std::string strCommand, CDataStream &vRecv, in
                         UintToArith256(hashSalt) ^ (hashAddr << 32) ^ ((GetTime() + hashAddr) / (24 * 60 * 60)));
                     hashRand = Hash(BEGIN(hashRand), END(hashRand));
                     std::multimap<uint256, CNode *> mapMix;
-                    for (CNode *pnode : vNodes)
+                    for (CNode *pnode : vNodesCopy)
                     {
                         if (pnode->nVersion < CADDR_TIME_VERSION)
                             continue;
@@ -5246,7 +5245,9 @@ bool ProcessMessage(CNode *pfrom, std::string strCommand, CDataStream &vRecv, in
                     int nRelayNodes = fReachable ? 2 : 1; // limited relaying of addresses outside our network(s)
                     for (std::multimap<uint256, CNode *>::iterator mi = mapMix.begin();
                          mi != mapMix.end() && nRelayNodes-- > 0; ++mi)
+                    {
                         ((*mi).second)->PushAddress(addr, insecure_rand);
+                    }
                 }
             }
             // Do not store addresses outside our network
@@ -5541,7 +5542,7 @@ bool ProcessMessage(CNode *pfrom, std::string strCommand, CDataStream &vRecv, in
         if (!AlreadyHaveTx(inv) && AcceptToMemoryPool(mempool, state, ptx, true, &fMissingInputs))
         {
             mempool.check(pcoinsTip);
-            RelayTransaction(ptx);
+            RelayTransaction(ptx, vNodesCopy);
             vWorkQueue.push_back(inv.hash);
 
             LOG(MEMPOOL, "AcceptToMemoryPool: peer=%d: accepted %s (poolsz %u txn, %u kB)\n", pfrom->id,
@@ -5582,7 +5583,7 @@ bool ProcessMessage(CNode *pfrom, std::string strCommand, CDataStream &vRecv, in
                     if (AcceptToMemoryPool(mempool, stateDummy, pOrphanTx, true, &fMissingInputs2))
                     {
                         LOG(MEMPOOL, "   accepted orphan tx %s\n", orphanHash.ToString());
-                        RelayTransaction(pOrphanTx);
+                        RelayTransaction(pOrphanTx, vNodesCopy);
                         vWorkQueue.push_back(orphanHash);
                         vEraseQueue.push_back(orphanHash);
                     }
@@ -5649,7 +5650,7 @@ bool ProcessMessage(CNode *pfrom, std::string strCommand, CDataStream &vRecv, in
                 if (!state.IsInvalid(nDoS) || nDoS == 0)
                 {
                     LOGA("Force relaying tx %s from whitelisted peer=%d\n", ptx->GetHash().ToString(), pfrom->id);
-                    RelayTransaction(ptx);
+                    RelayTransaction(ptx, vNodesCopy);
                 }
                 else
                 {
@@ -5857,18 +5858,6 @@ bool ProcessMessage(CNode *pfrom, std::string strCommand, CDataStream &vRecv, in
             // updated.
             if (IsInitialBlockDownload())
             {
-                // To maintain locking order with cs_main we have to addrefs for each node and then release
-                // the lock on cs_vNodes before aquiring cs_main further down.
-                std::vector<CNode *> vNodesCopy;
-                {
-                    LOCK(cs_vNodes);
-                    vNodesCopy = vNodes;
-                    for (CNode *pnode : vNodes)
-                    {
-                        pnode->AddRef();
-                    }
-                }
-
                 for (CNode *pnode : vNodesCopy)
                 {
                     if (!pnode->fClient && pnode != pfrom)
@@ -5890,10 +5879,6 @@ bool ProcessMessage(CNode *pfrom, std::string strCommand, CDataStream &vRecv, in
                         }
                     }
                 }
-
-                // release refs
-                for (CNode *pnode : vNodesCopy)
-                    pnode->Release();
             }
         }
 
@@ -6475,7 +6460,7 @@ bool ProcessMessage(CNode *pfrom, std::string strCommand, CDataStream &vRecv, in
 }
 
 
-bool ProcessMessages(CNode *pfrom)
+bool ProcessMessages(CNode *pfrom, std::vector<CNode *> &vNodesCopy)
 {
     const CChainParams &chainparams = Params();
     // if (fDebug)
@@ -6574,7 +6559,7 @@ bool ProcessMessages(CNode *pfrom)
         bool fRet = false;
         try
         {
-            fRet = ProcessMessage(pfrom, strCommand, vRecv, msg.nTime);
+            fRet = ProcessMessage(pfrom, strCommand, vRecv, msg.nTime, vNodesCopy);
             boost::this_thread::interruption_point();
         }
         catch (const std::ios_base::failure &e)

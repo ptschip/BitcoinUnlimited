@@ -144,7 +144,7 @@ struct CombinerAll
 struct CNodeSignals
 {
     boost::signals2::signal<int()> GetHeight;
-    boost::signals2::signal<bool(CNode *), CombinerAll> ProcessMessages;
+    boost::signals2::signal<bool(CNode *, std::vector<CNode *> &), CombinerAll> ProcessMessages;
     boost::signals2::signal<bool(CNode *), CombinerAll> SendMessages;
     boost::signals2::signal<void(const CNode *)> InitializeNode;
     boost::signals2::signal<void(NodeId)> FinalizeNode;
@@ -481,6 +481,7 @@ public:
     int nStartingHeight;
 
     // flood relay
+    CCriticalSection cs_vAddrToSend;
     std::vector<CAddress> vAddrToSend;
     CRollingBloomFilter addrKnown;
     bool fGetAddr;
@@ -614,6 +615,7 @@ public:
         // Known checking here is only to save space from duplicates.
         // SendMessages will filter it again for knowns that were added
         // after addresses were pushed.
+        LOCK(cs_vAddrToSend);
         if (_addr.IsValid() && !addrKnown.contains(_addr.GetKey()))
         {
             if (vAddrToSend.size() >= MAX_ADDR_TO_SEND)
@@ -968,6 +970,7 @@ typedef std::vector<CNodeRef> VNodeRefs;
 
 class CTransaction;
 void RelayTransaction(const CTransactionRef &ptx, const bool fRespend = false);
+void RelayTransaction(const CTransactionRef &ptx, const std::vector<CNode *> &vNodesCopy, const bool fRespend = false);
 
 /** Access to the (IP) address database (peers.dat) */
 class CAddrDB
