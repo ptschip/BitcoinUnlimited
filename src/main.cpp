@@ -6733,18 +6733,7 @@ bool SendMessages(CNode *pto)
         int64_t nNow = GetTimeMicros();
         requester.DisconnectOnDownloadTimeout(pto, consensusParams, nNow);
 
-        TRY_LOCK(cs_main, lockMain); // Acquire cs_main for IsInitialBlockDownload() and CNodeState()
-        if (!lockMain)
-        {
-            // LOG(NET, "skipping SendMessages to %s, cs_main is locked\n", pto->addr.ToString());
-            return true;
-        }
-        TRY_LOCK(pto->cs_vSend, lockSend);
-        if (!lockSend)
-        {
-            // LOG(NET, "skipping SendMessages to %s, pto->cs_vSend is locked\n", pto->addr.ToString());
-            return true;
-        }
+        LOCK(cs_main);
 
         // Address refresh broadcast
         if (!IsInitialBlockDownload() && pto->nNextLocalAddrSend < nNow)
