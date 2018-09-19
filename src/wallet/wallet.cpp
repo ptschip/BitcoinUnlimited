@@ -1388,7 +1388,7 @@ int CWallet::ScanForWalletTransactions(CBlockIndex *pindexStart, bool fUpdate)
         for (CNode *pnode : vNodes)
         {
             LOGA("Disconnecting peer: %s before wallet rescan\n", pnode->GetLogName());
-            pnode->fDisconnect = true;
+            pnode->Disconnect();
         }
     }
 

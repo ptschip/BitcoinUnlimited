@@ -691,7 +691,7 @@ int SocketSendData(CNode *pnode)
     int progress = 0;
 
     // Make sure we haven't already been asked to disconnect
-    if (pnode->fDisconnect)
+    if (pnode->IsDisconnecting())
         return progress;
 
     std::deque<CSerializeData>::iterator it = pnode->vSendMsg.begin();
@@ -842,7 +842,7 @@ static bool AttemptToEvictConnection(bool fPreferNewConnection)
                 continue;
             if (!node->fInbound)
                 continue;
-            if (node->fDisconnect)
+            if (node->IsDisconnecting())
                 continue;
             vEvictionCandidates.push_back(CNodeRef(node));
 
@@ -1087,7 +1087,7 @@ void ThreadSocketHandler()
             vector<CNode *> vNodesCopy = vNodes;
             for (CNode *pnode : vNodesCopy)
             {
-                if (pnode->fDisconnect || (pnode->GetRefCount() <= 0 && pnode->vRecvMsg.empty() &&
+                if (pnode->IsDisconnecting() || (pnode->GetRefCount() <= 0 && pnode->vRecvMsg.empty() &&
                                               pnode->nSendSize == 0 && pnode->ssSend.empty()))
                 {
                     // remove from vNodes
@@ -1307,7 +1307,7 @@ void ThreadSocketHandler()
                         else if (nBytes == 0)
                         {
                             // socket closed gracefully
-                            if (!pnode->fDisconnect)
+                            if (!pnode->IsDisconnecting())
                                 LOG(NET, "Node %s socket closed\n", pnode->GetLogName());
                             pnode->Disconnect();
                             continue;
@@ -1319,7 +1319,7 @@ void ThreadSocketHandler()
                             if (nErr != WSAEWOULDBLOCK && nErr != WSAEMSGSIZE && nErr != WSAEINTR &&
                                 nErr != WSAEINPROGRESS)
                             {
-                                if (!pnode->fDisconnect)
+                                if (!pnode->IsDisconnecting())
                                     LOG(NET, "Node %s socket recv error '%s'\n", pnode->GetLogName(),
                                         NetworkErrorString(nErr));
                                 pnode->Disconnect();
@@ -2157,7 +2157,7 @@ void ThreadMessageHandler()
                 vNodesCopy.clear();
                 for (CNode *pnode : vNodes)
                 {
-                    if (pnode->fDisconnect)
+                    if (pnode->IsDisconnecting())
                         continue;
                     vNodesCopy.push_back(pnode);
                     pnode->AddRef();
@@ -2178,7 +2178,7 @@ void ThreadMessageHandler()
 
         for (CNode *pnode : vNodesCopy)
         {
-            if (pnode->fDisconnect)
+            if (pnode->IsDisconnecting())
                 continue;
 
             // Receive messages from the net layer and put them into the receive queue.

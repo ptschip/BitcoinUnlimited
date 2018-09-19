@@ -732,7 +732,7 @@ static bool ReconstructBlock(CNode *pfrom, const bool fXVal, int &missingCount, 
         if (pfrom->nLocalGrapheneBlockBytes > maxAllowedSize)
         {
             graphenedata.ClearGrapheneBlockData(pfrom, pfrom->grapheneBlock.GetBlockHeader().GetHash());
-            pfrom->fDisconnect = true;
+            pfrom->Disconnect();
             return error(
                 "Reconstructed block %s (size:%llu) has caused max memory limit %llu bytes to be exceeded, peer=%s",
                 pfrom->grapheneBlock.GetHash().ToString(), pfrom->nLocalGrapheneBlockBytes, maxAllowedSize,
@@ -1347,7 +1347,7 @@ bool ClearLargestGrapheneBlockAndDisconnect(CNode *pfrom)
     if (pLargest != nullptr)
     {
         graphenedata.ClearGrapheneBlockData(pLargest, pLargest->grapheneBlock.GetBlockHeader().GetHash());
-        pLargest->fDisconnect = true;
+        pLargest->Disconnect();
 
         // If the our node is currently using up the most graphene block bytes then return true so that we
         // can stop processing this graphene block and let the disconnection happen.

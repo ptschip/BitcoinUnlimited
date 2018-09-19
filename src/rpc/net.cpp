@@ -259,7 +259,7 @@ UniValue disconnectnode(const UniValue &params, bool fHelp)
     if (!node)
         throw JSONRPCError(RPC_CLIENT_NODE_NOT_CONNECTED, "Node not found in connected nodes");
 
-    node->fDisconnect = true;
+    node->Disconnect();
 
     return NullUniValue;
 }

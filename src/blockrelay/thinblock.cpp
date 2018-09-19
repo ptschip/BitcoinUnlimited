@@ -926,7 +926,7 @@ static bool ReconstructBlock(CNode *pfrom, const bool fXVal, int &missingCount, 
         if (pfrom->nLocalThinBlockBytes > maxAllowedSize)
         {
             thindata.ClearThinBlockData(pfrom, pfrom->thinBlock.GetBlockHeader().GetHash());
-            pfrom->fDisconnect = true;
+            pfrom->Disconnect();
             return error(
                 "Reconstructed block %s (size:%llu) has caused max memory limit %llu bytes to be exceeded, peer=%s",
                 pfrom->thinBlock.GetHash().ToString(), pfrom->nLocalThinBlockBytes, maxAllowedSize,
@@ -1502,7 +1502,7 @@ bool ClearLargestThinBlockAndDisconnect(CNode *pfrom)
     if (pLargest != nullptr)
     {
         thindata.ClearThinBlockData(pLargest, pLargest->thinBlock.GetBlockHeader().GetHash());
-        pLargest->fDisconnect = true;
+        pLargest->Disconnect();
 
         // If the our node is currently using up the most thinblock bytes then return true so that we
         // can stop processing this thinblock and let the disconnection happen.

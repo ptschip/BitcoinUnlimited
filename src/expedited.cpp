@@ -123,7 +123,7 @@ void ActuallySendExpreditedBlock(CXThinBlock &thinBlock, unsigned char hops, con
     {
         CNode *n = nodeRef.get();
 
-        if (n->fDisconnect)
+        if (n->IsDisconnecting())
         {
             connmgr->RemovedNode(n);
         }

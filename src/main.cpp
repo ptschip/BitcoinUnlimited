@@ -6502,7 +6502,7 @@ bool ProcessMessages(CNode *pfrom)
 
     int msgsProcessed = 0;
     // Don't bother if send buffer is too full to respond anyway
-    while ((!pfrom->fDisconnect) && (pfrom->nSendSize < SendBufferSize()))
+    while ((!pfrom->IsDisconnecting()) && (pfrom->nSendSize < SendBufferSize()))
     {
         READLOCK(pfrom->csMsgSerializer);
         CNetMessage msg;
@@ -6663,7 +6663,7 @@ bool SendMessages(CNode *pto)
 
         // Now exit early if disconnecting or the version handshake is not complete.  We must not send PING or other
         // connection maintenance messages before the handshake is done.
-        if (pto->fDisconnect || !pto->fSuccessfullyConnected)
+        if (pto->IsDisconnecting() || !pto->fSuccessfullyConnected)
             return true;
 
         //

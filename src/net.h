@@ -386,8 +386,20 @@ public:
     bool fVerackSent;
     bool fBUVersionSent;
     bool fSuccessfullyConnected;
-    std::atomic<bool> fDisconnect;
     std::atomic<bool> fDisconnectRequest;
+private:
+    std::atomic<bool> fDisconnect;
+public:
+    bool IsDisconnecting()
+    {
+        return fDisconnect;
+    }
+    void Disconnect()
+    {
+        fDisconnect = true;
+        nLastNodeChange = GetTimeMicros();
+    }
+
     // We use fRelayTxes for two purposes -
     // a) it allows us to not relay tx invs before receiving the peer's version message
     // b) the peer may tell us in its version message that we should not relay tx invs
@@ -594,12 +606,6 @@ public:
         if (nServices & NODE_GRAPHENE)
             return true;
         return false;
-    }
-
-    void Disconnect()
-    {
-        fDisconnect = true;
-        nLastNodeChange = GetTimeMicros();
     }
 
     void AddAddressKnown(const CAddress &_addr) { addrKnown.insert(_addr.GetKey()); }

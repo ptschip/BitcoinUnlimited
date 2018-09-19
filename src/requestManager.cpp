@@ -644,7 +644,7 @@ void CRequestManager::SendRequests(CNode *pnode)
                     if (next.node != nullptr)
                     {
                         // Do not request from this node if it was disconnected
-                        if (next.node->fDisconnect)
+                        if (next.node->IsDisconnecting())
                         {
                             LOG(REQ, "ReqMgr: %s removed block ref to %s count %d (on disconnect).\n",
                                 item.obj.ToString(), next.node->GetLogName(), next.node->GetRefCount());
@@ -814,7 +814,7 @@ void CRequestManager::SendRequests(CNode *pnode)
                         item.availableFrom.pop_front();
                         if (next.node != nullptr)
                         {
-                            if (next.node->fDisconnect) // Node was disconnected so we can't request from it
+                            if (next.node->IsDisconnecting()) // Node was disconnected so we can't request from it
                             {
                                 LOG(REQ, "ReqMgr: %s removed tx ref to %d count %d (on disconnect).\n",
                                     item.obj.ToString(), next.node->GetId(), next.node->GetRefCount());
@@ -957,7 +957,7 @@ void CRequestManager::RequestNextBlocksToDownload(CNode *pto)
     AssertLockHeld(cs_main);
 
     int nBlocksInFlight = mapRequestManagerNodeState[pto->GetId()].nBlocksInFlight;
-    if (!pto->fDisconnectRequest && !pto->fDisconnect && !pto->fClient &&
+    if (!pto->fDisconnectRequest && !pto->IsDisconnecting() && !pto->fClient &&
         nBlocksInFlight < (int)pto->nMaxBlocksInTransit)
     {
         std::vector<CBlockIndex *> vToDownload;
@@ -1346,7 +1346,7 @@ void CRequestManager::DisconnectOnDownloadTimeout(CNode *pnode, const Consensus:
     // to unreasonably increase our timeout.
     LOCK(cs_objDownloader);
     NodeId nodeid = pnode->GetId();
-    if (!pnode->fDisconnect && mapRequestManagerNodeState[nodeid].vBlocksInFlight.size() > 0)
+    if (!pnode->IsDisconnecting() && mapRequestManagerNodeState[nodeid].vBlocksInFlight.size() > 0)
     {
         if (nNow >
             mapRequestManagerNodeState[nodeid].nDownloadingSince +
@@ -1354,7 +1354,7 @@ void CRequestManager::DisconnectOnDownloadTimeout(CNode *pnode, const Consensus:
         {
             LOGA("Timeout downloading block %s from peer %s, disconnecting\n",
                 mapRequestManagerNodeState[nodeid].vBlocksInFlight.front().hash.ToString(), pnode->GetLogName());
-            pnode->fDisconnect = true;
+            pnode->Disconnect();
         }
     }
 }

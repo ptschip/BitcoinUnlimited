@@ -992,7 +992,7 @@ void RPCConsole::disconnectSelectedNode()
     CNodeRef node = FindNodeRef(strNode.toStdString());
     if (node)
     {
-        node->fDisconnect = true;
+        node->Disconnect();
         clearSelectedNode();
     }
 }
@@ -1015,7 +1015,7 @@ void RPCConsole::banSelectedNode(int bantime)
         SplitHostPort(nStr, port, addr);
 
         dosMan.Ban(CNetAddr(addr), BanReasonManuallyAdded, bantime);
-        bannedNode->fDisconnect = true;
+        bannedNode->Disconnect();
 
         clearSelectedNode();
     }
