@@ -392,7 +392,7 @@ int DisconnectSubNetNodes(const CSubNet &subNet)
     {
         if (subNet.Match((CNetAddr)pnode->addr))
         {
-            pnode->fDisconnect = true;
+            pnode->Disconnect();
             nDisconnected++;
         }
     }
@@ -448,6 +448,7 @@ CNode *ConnectNode(CAddress addrConnect, const char *pszDest, bool fCountFailure
         {
             LOCK(cs_vNodes);
             vNodes.push_back(pnode);
+            nLastNodeChange = GetTimeMicros();
         }
 
         pnode->nTimeConnected = GetTime();
@@ -470,7 +471,7 @@ void CNode::CloseSocketDisconnect()
     if (fAutoOutbound)
         requester.nOutbound--;
 
-    fDisconnect = true;
+    Disconnect();
     if (hSocket != INVALID_SOCKET)
     {
         LOG(NET, "disconnecting peer %s\n", GetLogName());
@@ -747,7 +748,7 @@ int SocketSendData(CNode *pnode)
                 if (nErr != WSAEWOULDBLOCK && nErr != WSAEMSGSIZE && nErr != WSAEINTR && nErr != WSAEINPROGRESS)
                 {
                     LOG(NET, "socket send error '%s' to %s\n", NetworkErrorString(nErr), pnode->GetLogName());
-                    pnode->fDisconnect = true;
+                    pnode->Disconnect();
                 }
             }
             // couldn't send anything at all
@@ -850,7 +851,7 @@ static bool AttemptToEvictConnection(bool fPreferNewConnection)
             if (node->nPingNonceSent > 0 && node->nPingUsecTime == 0 && ((GetTime() - node->nTimeConnected) > 60))
             {
                 LOG(NET, "node %s evicted, slow ping\n", node->GetLogName());
-                node->fDisconnect = true;
+                node->Disconnect();
                 return true;
             }
         }
@@ -867,7 +868,7 @@ static bool AttemptToEvictConnection(bool fPreferNewConnection)
     // de-prioritized based on bytes in and bytes out.  A whitelisted peer will always get a connection and there is
     // no need here to check whether the peer is whitelisted or not.
     std::sort(vEvictionCandidatesByActivity.begin(), vEvictionCandidatesByActivity.end(), CompareNodeActivityBytes);
-    vEvictionCandidatesByActivity[0]->fDisconnect = true;
+    vEvictionCandidatesByActivity[0]->Disconnect();
 
     // BU - update the connection tracker
     {
@@ -1058,6 +1059,7 @@ static void AcceptConnection(const ListenSocket &hListenSocket)
     {
         LOCK(cs_vNodes);
         vNodes.push_back(pnode);
+        nLastNodeChange = GetTimeMicros();
     }
 }
 
@@ -1104,6 +1106,9 @@ void ThreadSocketHandler()
                     if (pnode->fNetworkNode || pnode->fInbound)
                         pnode->Release();
                     vNodesDisconnected.push_back(pnode);
+
+                    // Indicate that vNodes has changed.
+                    nLastNodeChange = GetTimeMicros();
                 }
             }
         }
@@ -1291,7 +1296,7 @@ void ThreadSocketHandler()
                         {
                             receiveShaper.leak(nBytes);
                             if (!pnode->ReceiveMsgBytes(recvMsgBuf, nBytes))
-                                pnode->fDisconnect = true;
+                                pnode->Disconnect();
                             int64_t tmp = GetTime();
                             pnode->recvGap << (tmp - pnode->nLastRecv);
                             pnode->nLastRecv = tmp;
@@ -1304,7 +1309,7 @@ void ThreadSocketHandler()
                             // socket closed gracefully
                             if (!pnode->fDisconnect)
                                 LOG(NET, "Node %s socket closed\n", pnode->GetLogName());
-                            pnode->fDisconnect = true;
+                            pnode->Disconnect();
                             continue;
                         }
                         else if (nBytes < 0)
@@ -1317,7 +1322,7 @@ void ThreadSocketHandler()
                                 if (!pnode->fDisconnect)
                                     LOG(NET, "Node %s socket recv error '%s'\n", pnode->GetLogName(),
                                         NetworkErrorString(nErr));
-                                pnode->fDisconnect = true;
+                                pnode->Disconnect();
                                 continue;
                             }
                         }
@@ -1351,26 +1356,26 @@ void ThreadSocketHandler()
                     LOG(NET, "Node %s socket no message in first 60 seconds, %d %d from %d\n", pnode->GetLogName(),
                         pnode->nLastRecv != 0, pnode->nLastSend != 0, pnode->id);
                     if (ignoreNetTimeouts.Value() == false)
-                        pnode->fDisconnect = true;
+                        pnode->Disconnect();
                 }
                 else if (nTime - pnode->nLastSend > TIMEOUT_INTERVAL)
                 {
                     LOG(NET, "Node %s socket sending timeout: %is\n", pnode->GetLogName(), nTime - pnode->nLastSend);
                     if (ignoreNetTimeouts.Value() == false)
-                        pnode->fDisconnect = true;
+                        pnode->Disconnect();
                 }
                 else if (nTime - pnode->nLastRecv > (pnode->nVersion > BIP0031_VERSION ? TIMEOUT_INTERVAL : 90 * 60))
                 {
                     LOG(NET, "Node %s socket receive timeout: %is\n", pnode->GetLogName(), nTime - pnode->nLastRecv);
                     if (ignoreNetTimeouts.Value() == false)
-                        pnode->fDisconnect = true;
+                        pnode->Disconnect();
                 }
                 else if (pnode->nPingNonceSent && pnode->nPingUsecStart + TIMEOUT_INTERVAL * 1000000 < GetTimeMicros())
                 {
                     LOG(NET, "Node %s ping timeout: %fs\n", pnode->GetLogName(),
                         0.000001 * (GetTimeMicros() - pnode->nPingUsecStart));
                     if (ignoreNetTimeouts.Value() == false)
-                        pnode->fDisconnect = true;
+                        pnode->Disconnect();
                 }
             }
         }
@@ -1782,7 +1787,7 @@ void ThreadOpenConnections()
             {
                 if (pNonXthinNode != nullptr)
                 {
-                    pNonXthinNode->fDisconnect = true;
+                    pNonXthinNode->Disconnect();
                     fDisconnected = true;
                     nDisconnects++;
                 }
@@ -1791,7 +1796,7 @@ void ThreadOpenConnections()
             {
                 if (pNonNodeNetwork != nullptr)
                 {
-                    pNonNodeNetwork->fDisconnect = true;
+                    pNonNodeNetwork->Disconnect();
                     fDisconnected = true;
                     nDisconnects++;
                 }
@@ -2109,31 +2114,52 @@ void ThreadMessageHandler()
     boost::mutex condition_mutex;
     boost::unique_lock<boost::mutex> lock(condition_mutex);
 
+    std::atomic<int64_t> nLastNodeCountCheck{0};
+    int64_t nLastRotation = GetTime();
+    vector<CNode *> vNodesCopy;
     while (true)
     {
-        vector<CNode *> vNodesCopy;
-        {
-            // We require the vNodes lock here, throughout, even though we are only incrementing
-            // an atomic counter when we AddRef(). We have to be aware that a socket disconnection
-            // could occur if we don't take the lock.
-            LOCK(cs_vNodes);
-
-            // During IBD and because of the multithreading of PV we end up favoring the first peer that
-            // connected and end up downloading a disproportionate amount of data from that first peer.
-            // By rotating vNodes evertime we send messages we can alleviate this problem.
-            // Rotate every 60 seconds so we don't do this too often.
-            static int64_t nLastRotation = GetTime();
-            if (IsInitialBlockDownload() && vNodes.size() > 0 && GetTime() - nLastRotation > 60)
+            if (IsInitialBlockDownload() && GetTime() - nLastRotation > 60)
             {
-                std::rotate(vNodes.begin(), vNodes.end() - 1, vNodes.end());
+                LOCK(cs_vNodes);
+
+                // During IBD and because of the multithreading of PV we end up favoring the first peer that
+                // connected and end up downloading a disproportionate amount of data from that first peer.
+                // By rotating vNodes evertime we send messages we can alleviate this problem.
+                // Rotate every 60 seconds so we don't do this too often.
                 nLastRotation = GetTime();
+                if (vNodes.size() > 0)
+                {
+                    std::rotate(vNodes.begin(), vNodes.end() - 1, vNodes.end());
+                    nLastRotation = GetTime();
+                    nLastNodeChange = GetTimeMicros();
+                }
             }
 
-            vNodesCopy = vNodes;
-            for (CNode *pnode : vNodes)
+            if (nLastNodeCountCheck < nLastNodeChange)
             {
-                pnode->AddRef();
-            }
+                // We require the vNodes lock here, throughout, even though we are only incrementing
+                // an atomic counter when we AddRef(). We have to be aware that a socket disconnection
+                // could occur if we don't take the lock.
+                LOCK(cs_vNodes);
+
+                // Release the old
+                for (CNode *pnode : vNodesCopy)
+                {
+                    pnode->Release();
+                }
+
+                // Aquire the new
+                vNodesCopy.clear();
+                for (CNode *pnode : vNodes)
+                {
+                    if (pnode->fDisconnect)
+                        continue;
+                    vNodesCopy.push_back(pnode);
+                    pnode->AddRef();
+                }
+
+                nLastNodeCountCheck = nLastNodeChange;
         }
 
         bool fSleep = true;
@@ -2145,7 +2171,7 @@ void ThreadMessageHandler()
 
             // Receive messages from the net layer and put them into the receive queue.
             if (!g_signals.ProcessMessages(pnode))
-                pnode->fDisconnect = true;
+                pnode->Disconnect();
 
             // Discover if there's more work to be done
             if (pnode->nSendSize < SendBufferSize())
@@ -2178,10 +2204,10 @@ void ThreadMessageHandler()
         // A cs_vNodes lock is not required here when releasing refs for two reasons: one, this only decrements
         // an atomic counter, and two, the counter will always be > 0 at this point, so we don't have to worry
         // that a pnode could be disconnected and no longer exist before the decrement takes place.
-        for (CNode *pnode : vNodesCopy)
-        {
-            pnode->Release();
-        }
+        //        for (CNode *pnode : vNodesCopy)
+        //        {
+        //            pnode->Release();
+        //        }
 
         if (fSleep)
         {
@@ -3017,7 +3043,7 @@ void CNode::DisconnectIfBanned()
             LOGA("Warning: not punishing whitelisted peer %s!\n", GetLogName());
         else
         {
-            fDisconnect = true;
+            Disconnect();
             if (addr.IsLocal())
                 LOGA("Warning: not banning local peer %s!\n", GetLogName());
             else

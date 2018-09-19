@@ -56,6 +56,8 @@ std::map<std::pair<void *, void *>, LockStack> lockorders;
 boost::thread_specific_ptr<LockStack> lockstack;
 #endif
 
+std::atomic<int64_t> nLastNodeChange{0};
+
 // this flag is set to true when a wallet rescan has been invoked.
 std::atomic<bool> fRescan{false};
 

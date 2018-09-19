@@ -48,6 +48,7 @@ class thread_group;
 } // namespace boost
 
 extern CTweak<unsigned int> numMsgHandlerThreads;
+extern std::atomic<int64_t> nLastNodeChange;
 
 /** Time between pings automatically sent out for latency probing and keepalive (in seconds). */
 static const int PING_INTERVAL = 2 * 60;
@@ -593,6 +594,12 @@ public:
         if (nServices & NODE_GRAPHENE)
             return true;
         return false;
+    }
+
+    void Disconnect()
+    {
+        fDisconnect = true;
+        nLastNodeChange = GetTimeMicros();
     }
 
     void AddAddressKnown(const CAddress &_addr) { addrKnown.insert(_addr.GetKey()); }

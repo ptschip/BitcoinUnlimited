@@ -4768,7 +4768,7 @@ bool static ProcessGetData(CNode *pfrom, const Consensus::Params &consensusParam
                     LOG(NET, "historical block serving limit reached, disconnect peer %s\n", pfrom->GetLogName());
 
                     // disconnect node
-                    pfrom->fDisconnect = true;
+                    pfrom->Disconnect();
                     fSend = false;
                 }
                 // Pruned nodes may have deleted the block, so check whether
@@ -4966,7 +4966,7 @@ bool ProcessMessage(CNode *pfrom, std::string strCommand, CDataStream &vRecv, in
         else
         {
             LOG(NET, "Inconsistent bloom filter settings peer %s\n", pfrom->GetLogName());
-            pfrom->fDisconnect = true;
+            pfrom->Disconnect();
             return false;
         }
     }
@@ -4979,7 +4979,7 @@ bool ProcessMessage(CNode *pfrom, std::string strCommand, CDataStream &vRecv, in
         {
             pfrom->PushMessage(
                 NetMsgType::REJECT, strCommand, REJECT_DUPLICATE, std::string("Duplicate version message"));
-            pfrom->fDisconnect = true;
+            pfrom->Disconnect();
             return error("Duplicate version message received - disconnecting peer=%s version=%s", pfrom->GetLogName(),
                 pfrom->cleanSubVer);
         }
@@ -5020,7 +5020,7 @@ bool ProcessMessage(CNode *pfrom, std::string strCommand, CDataStream &vRecv, in
         if (nNonce == nLocalHostNonce && nNonce > 1)
         {
             LOGA("connected to self at %s, disconnecting\n", pfrom->addr.ToString());
-            pfrom->fDisconnect = true;
+            pfrom->Disconnect();
             return true;
         }
 
@@ -5099,7 +5099,7 @@ bool ProcessMessage(CNode *pfrom, std::string strCommand, CDataStream &vRecv, in
             if (pfrom->fInbound == false)
             {
                 LOG(NET, "Disconnecting feeler to peer %s\n", pfrom->GetLogName());
-                pfrom->fDisconnect = true;
+                pfrom->Disconnect();
             }
         }
     }
@@ -5110,7 +5110,7 @@ bool ProcessMessage(CNode *pfrom, std::string strCommand, CDataStream &vRecv, in
         {
             // Must have version message before anything else (Although we may send our VERSION before
             // we receive theirs, it would not be possible to receive their VERACK before their VERSION).
-            pfrom->fDisconnect = true;
+            pfrom->Disconnect();
             return error("%s receieved before VERSION message - disconnecting peer=%s", strCommand,
        pfrom->GetLogName());
         }
@@ -5121,13 +5121,13 @@ bool ProcessMessage(CNode *pfrom, std::string strCommand, CDataStream &vRecv, in
         // If we haven't sent a VERSION message yet then we should not get a VERACK message.
         if (pfrom->tVersionSent < 0)
         {
-            pfrom->fDisconnect = true;
+            pfrom->Disconnect();
             return error("VERACK received but we never sent a VERSION message - disconnecting peer=%s version=%s",
                 pfrom->GetLogName(), pfrom->cleanSubVer);
         }
         if (pfrom->fSuccessfullyConnected)
         {
-            pfrom->fDisconnect = true;
+            pfrom->Disconnect();
             return error("duplicate VERACK received - disconnecting peer=%s version=%s", pfrom->GetLogName(),
                 pfrom->cleanSubVer);
         }
@@ -5177,7 +5177,7 @@ bool ProcessMessage(CNode *pfrom, std::string strCommand, CDataStream &vRecv, in
         // The peer may be slow so disconnect them only, to give them another chance if they try to re-connect.
         // If they are a bad peer and keep trying to reconnect and still do not VERACK, they will eventually
         // get banned by the connection slot algorithm which tracks disconnects and reconnects.
-        pfrom->fDisconnect = true;
+        pfrom->Disconnect();
         LOG(NET, "ERROR: disconnecting - VERACK not received within %d seconds for peer=%s version=%s\n",
             VERACK_TIMEOUT, pfrom->GetLogName(), pfrom->cleanSubVer);
 
@@ -5259,7 +5259,7 @@ bool ProcessMessage(CNode *pfrom, std::string strCommand, CDataStream &vRecv, in
         if (pfrom->fOneShot)
         {
             LOG(NET, "Disconnecting %s: one shot\n", pfrom->GetLogName());
-            pfrom->fDisconnect = true;
+            pfrom->Disconnect();
         }
     }
 
@@ -5737,7 +5737,7 @@ bool ProcessMessage(CNode *pfrom, std::string strCommand, CDataStream &vRecv, in
                 // to prevent the node from syncing.
                 if (header.GetBlockTime() < GetAdjustedTime() - 24 * 60 * 60)
                 {
-                    pfrom->fDisconnect = true;
+                    pfrom->Disconnect();
                     return error("non-continuous-headers sequence during node sync - disconnecting peer=%s",
                         pfrom->GetLogName());
                 }
@@ -6213,7 +6213,7 @@ bool ProcessMessage(CNode *pfrom, std::string strCommand, CDataStream &vRecv, in
         if (CNode::OutboundTargetReached(false) && !pfrom->fWhitelisted)
         {
             LOG(NET, "mempool request with bandwidth limit reached, disconnect peer %s\n", pfrom->GetLogName());
-            pfrom->fDisconnect = true;
+            pfrom->Disconnect();
             return true;
         }
         std::vector<uint256> vtxid;
@@ -6401,13 +6401,13 @@ bool ProcessMessage(CNode *pfrom, std::string strCommand, CDataStream &vRecv, in
                 pfrom->PushMessage(
                     NetMsgType::REJECT, strCommand, REJECT_INVALID, std::string("filter size was too small"));
                 LOG(NET, "Disconnecting %s: bloom filter size too small\n", pfrom->GetLogName());
-                pfrom->fDisconnect = true;
+                pfrom->Disconnect();
                 return false;
             }
         }
         else
         {
-            pfrom->fDisconnect = true;
+            pfrom->Disconnect();
             return false;
         }
     }
@@ -6632,7 +6632,7 @@ static bool CheckForDownloadTimeout(CNode *pto, bool fReceived, int64_t &nReques
         {
             LOG(THIN, "ERROR: Disconnecting peer %s due to thinblock download timeout exceeded (%d secs)\n",
                 pto->GetLogName(), (GetTime() - nRequestTime));
-            pto->fDisconnect = true;
+            pto->Disconnect();
             return true;
         }
     }
@@ -6656,7 +6656,7 @@ bool SendMessages(CNode *pto)
             LOG(IBD, "peer %s, checking disconnect request with %d in flight blocks\n", pto->GetLogName(), nInFlight);
             if (nInFlight == 0)
             {
-                pto->fDisconnect = true;
+                pto->Disconnect();
                 LOG(IBD, "peer %s, disconnect request was set, so disconnected\n", pto->GetLogName());
             }
         }
@@ -6788,7 +6788,7 @@ bool SendMessages(CNode *pto)
         if ((state.fSyncStarted) && (state.nSyncStartTime < GetTime() - INITIAL_HEADERS_TIMEOUT) &&
             (!state.fFirstHeadersReceived) && !pto->fWhitelisted)
         {
-            // pto->fDisconnect = true;
+            // pto->Disconnect();
             LOGA("Initial headers were either not received or not received before the timeout\n", pto->GetLogName());
         }
 
