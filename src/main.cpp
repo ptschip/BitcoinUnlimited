@@ -4366,8 +4366,13 @@ bool static ProcessGetData(CNode *pfrom, const Consensus::Params &consensusParam
                 }
                 if (!fPushed && inv.type == MSG_TX)
                 {
+
                     CTransactionRef ptx = nullptr;
-                    ptx = mempool.get(inv.hash);
+                    ptx = CommitQGet(inv.hash);
+                    if (!ptx)
+                    {
+                        ptx = mempool.get(inv.hash);
+                    }
                     if (ptx)
                     {
                         pfrom->PushMessage(NetMsgType::TX, ptx);
