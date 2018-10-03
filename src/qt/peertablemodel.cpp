@@ -53,7 +53,7 @@ public:
     void refreshPeers()
     {
         {
-            TRY_LOCK(cs_vNodes, lockNodes);
+            TRY_READ_LOCK(cs_vNodes, lockNodes);
             if (!lockNodes)
             {
                 // skip the refresh if we can't immediately get the lock

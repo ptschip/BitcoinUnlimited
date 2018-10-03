@@ -276,7 +276,7 @@ std::string FormatCoinbaseMessage(const std::vector<std::string> &comments, cons
 
 CNodeRef FindLikelyNode(const std::string &addrName)
 {
-    LOCK(cs_vNodes);
+    READLOCK(cs_vNodes);
     // always match any beginning part of string to be
     // compatible with old implementation of FindLikelyNode(..)
     std::string match_str = (addrName[addrName.size() - 1] == '*') ? addrName : addrName + "*";
@@ -636,7 +636,7 @@ void static BitcoinMiner(const CChainParams &chainparams)
                 {
                     bool fvNodesEmpty;
                     {
-                        LOCK(cs_vNodes);
+                        READLOCK(cs_vNodes);
                         fvNodesEmpty = vNodes.empty();
                     }
                     if (!fvNodesEmpty && !IsInitialBlockDownload())
@@ -2122,7 +2122,7 @@ extern UniValue getstructuresizes(const UniValue &params, bool fHelp)
     ret.push_back(Pair("lockorders", (uint64_t)lockorders.size()));
 #endif
 
-    LOCK(cs_vNodes);
+    READLOCK(cs_vNodes);
     std::vector<CNode *>::iterator n;
     uint64_t totalThinBlockSize = 0;
     int disconnected = 0; // watch # of disconnected nodes to ensure they are being cleaned up

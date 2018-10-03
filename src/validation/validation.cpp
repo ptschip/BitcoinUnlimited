@@ -2851,7 +2851,7 @@ bool ActivateBestChainStep(CValidationState &state,
             if (fCheckpointsEnabled)
                 nBlockEstimate = Checkpoints::GetTotalBlocksEstimate(chainparams.Checkpoints());
             {
-                LOCK(cs_vNodes);
+                READLOCK(cs_vNodes);
                 for (CNode *pnode : vNodes)
                 {
                     if (chainActive.Height() >

@@ -1490,7 +1490,7 @@ void CThinBlockData::FillThinBlockQuickStats(ThinBlockQuickStats &stats)
 bool HaveThinblockNodes()
 {
     {
-        LOCK(cs_vNodes);
+        READLOCK(cs_vNodes);
         for (CNode *pnode : vNodes)
             if (pnode->ThinBlockCapable())
                 return true;
@@ -1511,7 +1511,7 @@ bool CanThinBlockBeDownloaded(CNode *pto)
 bool ClearLargestThinBlockAndDisconnect(CNode *pfrom)
 {
     CNode *pLargest = nullptr;
-    LOCK(cs_vNodes);
+    READLOCK(cs_vNodes);
     for (CNode *pnode : vNodes)
     {
         if ((pLargest == nullptr) || (pnode->nLocalThinBlockBytes > pLargest->nLocalThinBlockBytes))

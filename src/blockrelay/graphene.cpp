@@ -1337,7 +1337,7 @@ void CGrapheneBlockData::FillGrapheneQuickStats(GrapheneQuickStats &stats)
 
 bool HaveGrapheneNodes()
 {
-    LOCK(cs_vNodes);
+    READLOCK(cs_vNodes);
     for (CNode *pnode : vNodes)
         if (pnode->GrapheneCapable())
             return true;
@@ -1357,7 +1357,7 @@ bool CanGrapheneBlockBeDownloaded(CNode *pto)
 bool ClearLargestGrapheneBlockAndDisconnect(CNode *pfrom)
 {
     CNode *pLargest = nullptr;
-    LOCK(cs_vNodes);
+    READLOCK(cs_vNodes);
     for (CNode *pnode : vNodes)
     {
         if ((pLargest == nullptr) || (pnode->nLocalGrapheneBlockBytes > pLargest->nLocalGrapheneBlockBytes))

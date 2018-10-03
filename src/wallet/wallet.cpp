@@ -1394,7 +1394,7 @@ int CWallet::ScanForWalletTransactions(CBlockIndex *pindexStart, bool fUpdate)
     fRescan = true;
     if (Params().NetworkIDString() != "regtest")
     {
-        LOCK(cs_vNodes);
+        READLOCK(cs_vNodes);
         for (CNode *pnode : vNodes)
         {
             LOGA("Disconnecting peer: %s before wallet rescan\n", pnode->GetLogName());

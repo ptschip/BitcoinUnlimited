@@ -112,7 +112,7 @@ std::string strSubVersion;
 
 // BU moved to global.cpp
 // extern vector<CNode*> vNodes;
-// extern CCriticalSection cs_vNodes;
+// extern CSharedCriticalSection cs_vNodes;
 // map<CInv, CDataStream> mapRelay;
 // CCriticalSection cs_mapRelay;
 
@@ -380,14 +380,14 @@ static CNode *FindNode(const CService &addr)
 
 CNodeRef FindNodeRef(const std::string &addrName)
 {
-    LOCK(cs_vNodes);
+    READLOCK(cs_vNodes);
     return CNodeRef(FindNode(addrName));
 }
 
 int DisconnectSubNetNodes(const CSubNet &subNet)
 {
     int nDisconnected = 0;
-    LOCK(cs_vNodes);
+    READLOCK(cs_vNodes);
     for (CNode *pnode : vNodes)
     {
         if (subNet.Match((CNetAddr)pnode->addr))
@@ -408,8 +408,8 @@ CNode *ConnectNode(CAddress addrConnect, const char *pszDest, bool fCountFailure
         if (IsLocal(addrConnect))
             return nullptr;
 
-        // BU: Add lock on cs_vNodes as FindNode now requries it to prevent potential use-after-free errors
-        LOCK(cs_vNodes);
+        // Add lock on cs_vNodes as FindNode now requries it to prevent potential use-after-free errors
+        READLOCK(cs_vNodes);
         // Look for an existing connection
         CNode *pnode = FindNode((CService)addrConnect);
         if (pnode)
@@ -446,7 +446,7 @@ CNode *ConnectNode(CAddress addrConnect, const char *pszDest, bool fCountFailure
         pnode->AddRef();
 
         {
-            LOCK(cs_vNodes);
+            WRITELOCK(cs_vNodes);
             vNodes.push_back(pnode);
         }
 
@@ -826,7 +826,7 @@ static bool AttemptToEvictConnection(bool fPreferNewConnection)
     std::vector<CNodeRef> vEvictionCandidates;
     std::vector<CNodeRef> vEvictionCandidatesByActivity;
     {
-        LOCK(cs_vNodes);
+        READLOCK(cs_vNodes);
 
         static int64_t nLastTime = GetTime();
         for (CNode *node : vNodes)
@@ -986,7 +986,7 @@ static void AcceptConnection(const ListenSocket &hListenSocket)
 
     int nInbound = 0;
     {
-        LOCK(cs_vNodes);
+        READLOCK(cs_vNodes);
         for (CNode *pnode : vNodes)
             if (pnode->fInbound)
                 nInbound++;
@@ -1004,8 +1004,8 @@ static void AcceptConnection(const ListenSocket &hListenSocket)
         }
     }
 
-    // BU - add inbound connection to the ip tracker and increment counter
-    // If connection attempts exceeded within allowable timeframe then ban peer
+    // Add inbound connection to the ip tracker and increment counter.
+    // If connection attempts exceeded within allowable timeframe then ban peer.
     {
         double nConnections = 0;
         LOCK(cs_mapInboundConnectionTracker);
@@ -1048,7 +1048,6 @@ static void AcceptConnection(const ListenSocket &hListenSocket)
             return;
         }
     }
-    // BU - end section
 
     CNode *pnode = new CNode(hSocket, addr, "", true);
     pnode->AddRef();
@@ -1057,7 +1056,7 @@ static void AcceptConnection(const ListenSocket &hListenSocket)
     LOG(NET, "connection from %s accepted\n", addr.ToString());
 
     {
-        LOCK(cs_vNodes);
+        WRITELOCK(cs_vNodes);
         vNodes.push_back(pnode);
     }
 }
@@ -1081,7 +1080,7 @@ void ThreadSocketHandler()
         // Disconnect nodes
         //
         {
-            LOCK(cs_vNodes);
+            WRITELOCK(cs_vNodes);
             // Disconnect unused nodes
             vector<CNode *> vNodesCopy = vNodes;
             for (CNode *pnode : vNodesCopy)
@@ -1172,7 +1171,7 @@ void ThreadSocketHandler()
         }
 
         {
-            LOCK(cs_vNodes);
+            READLOCK(cs_vNodes);
             for (CNode *pnode : vNodes)
             {
                 // It is necessary to use a temporary variable to ensure that pnode->hSocket is not changed by another
@@ -1253,7 +1252,7 @@ void ThreadSocketHandler()
         //
         vector<CNode *> vNodesCopy;
         {
-            LOCK(cs_vNodes);
+            WRITELOCK(cs_vNodes);
             vNodesCopy = vNodes;
             for (CNode *pnode : vNodesCopy)
                 pnode->AddRef();
@@ -1531,7 +1530,7 @@ static void DNSAddressSeed()
     {
         MilliSleep(11 * 1000);
 
-        LOCK(cs_vNodes);
+        READLOCK(cs_vNodes);
         if (vNodes.size() >= 2)
         {
             LOGA("P2P peers available. Skipped DNS seeding.\n");
@@ -1611,7 +1610,7 @@ static void BitnodesAddressSeed()
     if ((addrman.size() > 0) && (!GetBoolArg("-forcebitnodes", DEFAULT_FORCEBITNODES)))
     {
         MilliSleep(11 * 1000);
-        LOCK(cs_vNodes);
+        READLOCK(cs_vNodes);
         if (vNodes.size() >= 2)
         {
             LOGA("P2P peers available. Skipped Bitnodes seeding.\n");
@@ -1757,7 +1756,7 @@ void ThreadOpenConnections()
         CNode *pNonNodeNetwork = nullptr;
         bool fDisconnected = false;
         {
-            LOCK(cs_vNodes);
+            READLOCK(cs_vNodes);
             for (CNode *pnode : vNodes)
             {
                 if (pnode->fAutoOutbound) // only count outgoing connections.
@@ -1814,7 +1813,7 @@ void ThreadOpenConnections()
             {
                 MilliSleep(500);
                 {
-                    LOCK(cs_vNodes);
+                    READLOCK(cs_vNodes);
                     if (find(vNodes.begin(), vNodes.end(), pNonXthinNode) == vNodes.end() ||
                         find(vNodes.begin(), vNodes.end(), pNonNodeNetwork) == vNodes.end())
                     {
@@ -1939,7 +1938,7 @@ void ThreadOpenConnections()
             if (OpenNetworkConnection(addrConnect, (int)setConnected.size() >= std::min(nMaxConnections - 1, 2), &grant,
                     nullptr, false, fFeeler))
             {
-                LOCK(cs_vNodes);
+                READLOCK(cs_vNodes);
                 CNode *pnode = FindNode((CService)addrConnect);
                 // We need to use a separate outbound flag so as not to differentiate these outbound
                 // nodes with ones that were added using -addnode -connect-thinblock or -connect.
@@ -2027,7 +2026,7 @@ void ThreadOpenAddedConnections()
         // Attempt to connect to each IP for each addnode entry until at least one is successful per addnode entry
         // (keeping in mind that addnode entries can have many IPs if fNameLookup)
         {
-            LOCK(cs_vNodes);
+            READLOCK(cs_vNodes);
             for (CNode *pnode : vNodes)
             {
                 for (list<vector<CService> >::iterator it = lservAddressesToAdd.begin();
@@ -2076,8 +2075,8 @@ bool OpenNetworkConnection(const CAddress &addrConnect,
     //
     boost::this_thread::interruption_point();
     {
-        // BU: Add lock on cs_vNodes as FindNode now requries it to prevent potential use-after-free errors
-        LOCK(cs_vNodes);
+        // Add lock on cs_vNodes as FindNode now requries it to prevent potential use-after-free errors
+        READLOCK(cs_vNodes);
         if (!pszDest)
         {
             if (IsLocal(addrConnect) || FindNode((CNetAddr)addrConnect) || dosMan.IsBanned(addrConnect) ||
@@ -2117,7 +2116,7 @@ void ThreadMessageHandler()
             // We require the vNodes lock here, throughout, even though we are only incrementing
             // an atomic counter when we AddRef(). We have to be aware that a socket disconnection
             // could occur if we don't take the lock.
-            LOCK(cs_vNodes);
+            WRITELOCK(cs_vNodes);
 
             // During IBD and because of the multithreading of PV we end up favoring the first peer that
             // connected and end up downloading a disproportionate amount of data from that first peer.
@@ -2447,7 +2446,7 @@ bool StopNode()
 
 void NetCleanup()
 {
-    LOCK(cs_vNodes);
+    WRITELOCK(cs_vNodes);
 
     // Close sockets
     for (CNode *pnode : vNodes)
@@ -2513,7 +2512,7 @@ void RelayTransaction(const CTransactionRef &ptx, const bool fRespend)
         mapRelay.insert(std::make_pair(inv, ptx));
         vRelayExpiration.push_back(std::make_pair(GetTime() + 15 * 60, inv));
     }
-    LOCK(cs_vNodes);
+    READLOCK(cs_vNodes);
     for (CNode *pnode : vNodes)
     {
         if (!pnode->fRelayTxes)
@@ -2807,7 +2806,6 @@ CNode::CNode(SOCKET hSocketIn, const CAddress &addrIn, const std::string &addrNa
     fGetAddr = false;
     nNextLocalAddrSend = 0;
     nNextAddrSend = 0;
-    nNextInvSend = 0;
     fRelayTxes = false;
     fSentAddr = false;
     pfilter = new CBloomFilter();

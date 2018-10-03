@@ -1083,7 +1083,11 @@ bool ProcessMessage(CNode *pfrom, std::string strCommand, CDataStream &vRecv, in
         if (!vRecv.empty())
             vRecv >> pfrom->nStartingHeight;
         if (!vRecv.empty())
-            vRecv >> pfrom->fRelayTxes; // set to true after we get the first filter* message
+        {
+            bool fTemp;
+            vRecv >> fTemp;
+            pfrom->fRelayTxes.store(fTemp); // set to true after we get the first filter* message
+        }
         else
             pfrom->fRelayTxes = true;
 
@@ -1291,18 +1295,19 @@ bool ProcessMessage(CNode *pfrom, std::string strCommand, CDataStream &vRecv, in
             bool fReachable = IsReachable(addr);
             if (addr.nTime > nSince && !pfrom->fGetAddr && vAddr.size() <= 10 && addr.IsRoutable())
             {
+                // Use deterministic randomness to send to the same nodes for 24 hours
+                // at a time so the addrKnowns of the chosen nodes prevent repeats
+                static uint256 hashSalt;
+                if (hashSalt.IsNull())
+                    hashSalt = GetRandHash();
+                uint64_t hashAddr = addr.GetHash();
+                uint256 hashRand = ArithToUint256(
+                    UintToArith256(hashSalt) ^ (hashAddr << 32) ^ ((GetTime() + hashAddr) / (24 * 60 * 60)));
+                hashRand = Hash(BEGIN(hashRand), END(hashRand));
+
                 // Relay to a limited number of other nodes
                 {
-                    LOCK(cs_vNodes);
-                    // Use deterministic randomness to send to the same nodes for 24 hours
-                    // at a time so the addrKnowns of the chosen nodes prevent repeats
-                    static uint256 hashSalt;
-                    if (hashSalt.IsNull())
-                        hashSalt = GetRandHash();
-                    uint64_t hashAddr = addr.GetHash();
-                    uint256 hashRand = ArithToUint256(
-                        UintToArith256(hashSalt) ^ (hashAddr << 32) ^ ((GetTime() + hashAddr) / (24 * 60 * 60)));
-                    hashRand = Hash(BEGIN(hashRand), END(hashRand));
+                    READLOCK(cs_vNodes);
                     std::multimap<uint256, CNode *> mapMix;
                     for (CNode *pnode : vNodes)
                     {
@@ -1807,7 +1812,7 @@ bool ProcessMessage(CNode *pfrom, std::string strCommand, CDataStream &vRecv, in
                 // the lock on cs_vNodes before aquiring cs_main further down.
                 std::vector<CNode *> vNodesCopy;
                 {
-                    LOCK(cs_vNodes);
+                    WRITELOCK(cs_vNodes);
                     vNodesCopy = vNodes;
                     for (CNode *pnode : vNodes)
                     {

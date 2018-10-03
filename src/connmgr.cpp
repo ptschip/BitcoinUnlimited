@@ -67,14 +67,12 @@ NodeId CConnMgr::NextNodeId()
  */
 CNodeRef CConnMgr::FindNodeFromId(NodeId id)
 {
-    LOCK(cs_vNodes);
-
+    READLOCK(cs_vNodes);
     for (CNode *pNode : vNodes)
     {
         if (pNode->GetId() == id)
             return CNodeRef(pNode);
     }
-
     return CNodeRef();
 }
 

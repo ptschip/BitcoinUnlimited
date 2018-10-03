@@ -53,8 +53,10 @@ BOOST_AUTO_TEST_CASE(triggers_correctly)
 
     CNode node(INVALID_SOCKET, CAddress());
     node.fRelayTxes = true;
-    LOCK(cs_vNodes);
-    vNodes.push_back(&node);
+    {
+        WRITELOCK(cs_vNodes);
+        vNodes.push_back(&node);
+    }
 
     // Create a "not interesting" respend
     RespendRelayer r;

@@ -195,7 +195,7 @@ extern int nMaxConnections;
 /** The minimum number of xthin nodes to connect to */
 extern int nMinXthinNodes;
 extern std::vector<CNode *> vNodes;
-extern CCriticalSection cs_vNodes;
+extern CSharedCriticalSection cs_vNodes;
 extern std::map<CInv, CTransactionRef> mapRelay;
 extern std::deque<std::pair<int64_t, CInv> > vRelayExpiration;
 extern CCriticalSection cs_mapRelay;
@@ -380,39 +380,41 @@ public:
     // store the sanitized version in cleanSubVer. The original should be used when dealing with
     // the network or wire types and the cleaned string used when displayed or logged.
     std::string strSubVer, cleanSubVer;
-    bool fWhitelisted; // This peer can bypass DoS banning.
-    bool fFeeler; // If true this node is being used as a short lived feeler.
-    bool fOneShot;
-    bool fClient;
-    bool fInbound;
-    bool fAutoOutbound; // any outbound node not connected with -addnode, connect-thinblock or -connect
-    bool fNetworkNode; // any outbound node
+    std::atomic<bool>  fWhitelisted; // This peer can bypass DoS banning.
+    std::atomic<bool>  fFeeler; // If true this node is being used as a short lived feeler.
+    std::atomic<bool>  fOneShot;
+    std::atomic<bool>  fClient;
+    std::atomic<bool>  fInbound;
+    std::atomic<bool>  fAutoOutbound; // any outbound node not connected with -addnode, connect-thinblock or -connect
+    std::atomic<bool>  fNetworkNode; // any outbound node
     int64_t tVersionSent;
-    bool fVerackSent;
-    bool fBUVersionSent;
-    bool fSuccessfullyConnected;
+    std::atomic<bool>  fVerackSent;
+    std::atomic<bool>  fBUVersionSent;
+    std::atomic<bool>  fSuccessfullyConnected;
     std::atomic<bool> fDisconnect;
     std::atomic<bool> fDisconnectRequest;
     // We use fRelayTxes for two purposes -
     // a) it allows us to not relay tx invs before receiving the peer's version message
     // b) the peer may tell us in its version message that we should not relay tx invs
     //    unless it loads a bloom filter.
-    bool fRelayTxes;
-    bool fSentAddr;
+    std::atomic<bool>  fRelayTxes;
+    std::atomic<bool>  fSentAddr;
     CSemaphoreGrant grantOutbound;
+
     CCriticalSection cs_filter;
-    CBloomFilter *pfilter;
-    // BU - Xtreme Thinblocks: a bloom filter which is separate from the one used by SPV wallets
-    CBloomFilter *pThinBlockFilter;
+    CBloomFilter *pfilter GUARDED_BY(cs_filter);
+    // Xtreme Thinblocks: a bloom filter sent in a get_xthin message.
+    CBloomFilter *pThinBlockFilter GUARDED_BY(cs_filter);
+
     std::atomic<int> nRefCount;
     NodeId id;
 
     //! Accumulated misbehaviour score for this peer.
     std::atomic<int> nMisbehavior;
     //! Whether this peer should be disconnected and banned (unless whitelisted).
-    bool fShouldBan;
+    std::atomic<bool>  fShouldBan;
     //! Whether we have a fully established connection.
-    bool fCurrentlyConnected;
+    std::atomic<bool>  fCurrentlyConnected;
 
     // BUIP010 Xtreme Thinblocks: begin section
     CBlock thinBlock;
@@ -479,19 +481,17 @@ public:
     // flood relay
     std::vector<CAddress> vAddrToSend GUARDED_BY(cs_vSend);
     CRollingBloomFilter addrKnown;
-    bool fGetAddr;
+    std::atomic<bool>  fGetAddr;
     std::set<uint256> setKnown;
     int64_t nNextAddrSend;
     int64_t nNextLocalAddrSend;
 
     // inventory based relay
-    CRollingFastFilter<4 * 1024 * 1024> filterInventoryKnown;
-    std::vector<CInv> vInventoryToSend;
     CCriticalSection cs_inventory;
-    int64_t nNextInvSend;
+    CRollingFastFilter<4 * 1024 * 1024> filterInventoryKnown;
+    std::vector<CInv> vInventoryToSend GUARDED_BY(cs_inventory);
     // Used for headers announcements - unfiltered blocks to relay
-    // Also protected by cs_inventory
-    std::vector<uint256> vBlockHashesToAnnounce;
+    std::vector<uint256> vBlockHashesToAnnounce  GUARDED_BY(cs_inventory);
 
     // Ping time measurement:
     // The pong reply we're expecting, or 0 if no pong expected.
@@ -503,7 +503,7 @@ public:
     // Best measured round-trip time.
     int64_t nMinPingUsecTime;
     // Whether a ping is requested.
-    bool fPingQueued;
+    std::atomic<bool>  fPingQueued;
 
     // BU instrumentation
     // track the number of bytes sent to this node

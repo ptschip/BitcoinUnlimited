@@ -655,7 +655,8 @@ void HandleBlockMessageThread(CNode *pfrom, const string strCommand, CBlockRef p
     {
         int nTotalThinBlocksInFlight = 0;
         {
-            LOCK2(cs_vNodes, pfrom->cs_mapthinblocksinflight);
+            READLOCK(cs_vNodes);
+            LOCK(pfrom->cs_mapthinblocksinflight);
 
             // Erase this thinblock from the tracking map now that we're done with it.
             if (pfrom->mapThinBlocksInFlight.count(inv.hash))
@@ -688,7 +689,8 @@ void HandleBlockMessageThread(CNode *pfrom, const string strCommand, CBlockRef p
     {
         int nTotalGrapheneBlocksInFlight = 0;
         {
-            LOCK2(cs_vNodes, pfrom->cs_mapgrapheneblocksinflight);
+            READLOCK(cs_vNodes);
+            LOCK(pfrom->cs_mapgrapheneblocksinflight);
 
             // Erase this graphene block from the tracking map now that we're done with it.
             if (pfrom->mapGrapheneBlocksInFlight.count(inv.hash))

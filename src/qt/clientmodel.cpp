@@ -49,7 +49,7 @@ ClientModel::ClientModel(OptionsModel *_optionsModel, UnlimitedModel *ul, QObjec
 ClientModel::~ClientModel() { unsubscribeFromCoreSignals(); }
 int ClientModel::getNumConnections(unsigned int flags) const
 {
-    LOCK(cs_vNodes);
+    READLOCK(cs_vNodes);
     if (flags == CONNECTIONS_ALL) // Shortcut if we want total
         return vNodes.size();
 

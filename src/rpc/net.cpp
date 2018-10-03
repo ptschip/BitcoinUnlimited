@@ -42,8 +42,7 @@ UniValue getconnectioncount(const UniValue &params, bool fHelp)
                             "\nExamples:\n" +
                             HelpExampleCli("getconnectioncount", "") + HelpExampleRpc("getconnectioncount", ""));
 
-    LOCK2(cs_main, cs_vNodes);
-
+    READLOCK(cs_vNodes);
     return (int)vNodes.size();
 }
 
@@ -59,21 +58,20 @@ UniValue ping(const UniValue &params, bool fHelp)
                             HelpExampleCli("ping", "") + HelpExampleRpc("ping", ""));
 
     // Request that each node send a ping during next message processing pass
-    LOCK2(cs_main, cs_vNodes);
-
+    READLOCK(cs_vNodes);
     for (CNode *pNode : vNodes)
     {
         pNode->fPingQueued = true;
     }
-
     return NullUniValue;
 }
 
 static void CopyNodeStats(std::vector<CNodeStats> &vstats)
 {
+    AssertLockHeld(cs_main);
     vstats.clear();
 
-    LOCK(cs_vNodes);
+    READLOCK(cs_vNodes);
     vstats.reserve(vNodes.size());
     for (CNode *pnode : vNodes)
     {
@@ -350,7 +348,7 @@ UniValue getaddednodeinfo(const UniValue &params, bool fHelp)
         }
     }
 
-    LOCK(cs_vNodes);
+    READLOCK(cs_vNodes);
     for (list<pair<string, vector<CService> > >::iterator it = laddedAddreses.begin(); it != laddedAddreses.end(); it++)
     {
         UniValue obj(UniValue::VOBJ);

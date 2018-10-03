@@ -221,7 +221,7 @@ void CRequestManager::AskForDuringIBD(const std::vector<CInv> &objArray, CNode *
 
     // Add the other peers as potential sources in the event the RequestManager needs to make a re-request
     // for this block. Only add NETWORK nodes that have block availability.
-    LOCK(cs_vNodes);
+    READLOCK(cs_vNodes);
     for (CNode *pnode : vNodes)
     {
         // skip the peer we added above
@@ -1278,7 +1278,7 @@ bool CRequestManager::MarkBlockAsReceived(const uint256 &hash, CNode *pnode)
         if (IsChainNearlySyncd())
         {
             // Update the appropriate response time based on the type of block received.
-            LOCK(cs_vNodes);
+            READLOCK(cs_vNodes);
             for (CNode *_pnode : vNodes)
             {
                 // Update Thinblock stats
