@@ -6,6 +6,7 @@
 
 #include "blockrelay/blockrelay_common.h"
 #include "blockrelay/graphene.h"
+#include "blockrelay/compactblock.h"
 #include "blockstorage/blockstorage.h"
 #include "chainparams.h"
 #include "dosman.h"
@@ -642,6 +643,7 @@ void HandleBlockMessageThread(CNode *pfrom, const string strCommand, CBlockRef p
         // Clear thinblock data and thinblock in flight
         thindata.ClearThinBlockData(pfrom, inv.hash);
         graphenedata.ClearGrapheneBlockData(pfrom, inv.hash);
+        compactdata.ClearCompactBlockData(pfrom, inv.hash);
 
         pfrom->firstBlock += 1;
     }
@@ -652,6 +654,7 @@ void HandleBlockMessageThread(CNode *pfrom, const string strCommand, CBlockRef p
     {
         thindata.ResetThinBlockBytes();
         graphenedata.ResetGrapheneBlockBytes();
+        compactdata.ResetCompactBlockBytes();
 
         LOCK(cs_xval);
         setPreVerifiedTxHash.clear();
