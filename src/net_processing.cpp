@@ -8,6 +8,7 @@
 
 #include "addrman.h"
 #include "blockrelay/blockrelay_common.h"
+#include "blockrelay/compactblock.h"
 #include "blockrelay/graphene.h"
 #include "blockrelay/thinblock.h"
 #include "blockstorage/blockstorage.h"
@@ -83,7 +84,8 @@ void static ProcessGetData(CNode *pfrom, const Consensus::Params &consensusParam
         vInv.pop_front();
         {
             boost::this_thread::interruption_point();
-            if (inv.type == MSG_BLOCK || inv.type == MSG_FILTERED_BLOCK || inv.type == MSG_THINBLOCK)
+            if (inv.type == MSG_BLOCK || inv.type == MSG_FILTERED_BLOCK || inv.type == MSG_THINBLOCK ||
+                inv.type == MSG_CMPCT_BLOCK)
             {
                 bool fSend = false;
                 auto *mi = LookupBlockIndex(inv.hash);
@@ -159,8 +161,13 @@ void static ProcessGetData(CNode *pfrom, const Consensus::Params &consensusParam
                         }
                         else if (inv.type == MSG_THINBLOCK)
                         {
-                            LOG(THIN, "Sending thinblock by INV queue getdata message\n");
+                            LOG(THIN, "Sending thinblock via getdata message\n");
                             SendXThinBlock(MakeBlockRef(block), pfrom, inv);
+                        }
+                        else if (inv.type == MSG_CMPCT_BLOCK)
+                        {
+                            LOG(CMPCT, "Sending compact block via getdata message\n");
+                            SendCompactBlock(MakeBlockRef(block), pfrom, inv);
                         }
                         else // MSG_FILTERED_BLOCK)
                         {
@@ -376,6 +383,17 @@ static void enableSendHeaders(CNode *pfrom)
         pfrom->PushMessage(NetMsgType::SENDHEADERS);
 }
 
+static void enableCompactBlocks(CNode *pfrom)
+{
+    // Tell our peer that we support compact blocks
+    if (pfrom->nVersion >= 70014)
+    {
+        bool fHighBandwidth = false;
+        uint64_t nVersion = 1;
+        pfrom->PushMessage(NetMsgType::SENDCMPCT, fHighBandwidth, nVersion);
+    }
+}
+
 bool ProcessMessage(CNode *pfrom, std::string strCommand, CDataStream &vRecv, int64_t nTimeReceived)
 {
     int64_t receiptTime = GetTime();
@@ -422,6 +440,7 @@ bool ProcessMessage(CNode *pfrom, std::string strCommand, CDataStream &vRecv, in
         pfrom->state_incoming = ConnectionStateIncoming::READY;
         handleAddressAfterInit(pfrom);
         enableSendHeaders(pfrom);
+        enableCompactBlocks(pfrom);
     }
     // ------------------------- BEGIN INITIAL COMMAND SET PROCESSING
     if (strCommand == NetMsgType::VERSION)
@@ -634,6 +653,7 @@ bool ProcessMessage(CNode *pfrom, std::string strCommand, CDataStream &vRecv, in
         pfrom->state_incoming = ConnectionStateIncoming::READY;
         handleAddressAfterInit(pfrom);
         enableSendHeaders(pfrom);
+        enableCompactBlocks(pfrom);
     }
     else if (strCommand == NetMsgType::XVERACK)
     {
@@ -943,7 +963,7 @@ bool ProcessMessage(CNode *pfrom, std::string strCommand, CDataStream &vRecv, in
         {
             const CInv &inv = vInv[nInv];
             if (!((inv.type == MSG_TX) || (inv.type == MSG_BLOCK) || (inv.type == MSG_FILTERED_BLOCK) ||
-                    (inv.type == MSG_THINBLOCK)))
+                    (inv.type == MSG_CMPCT_BLOCK) || (inv.type == MSG_THINBLOCK)))
             {
                 dosMan.Misbehaving(pfrom, 20);
                 return error("message inv invalid type = %u", inv.type);
@@ -955,6 +975,7 @@ bool ProcessMessage(CNode *pfrom, std::string strCommand, CDataStream &vRecv, in
                 if (!BasicThinblockChecks(pfrom, chainparams))
                     return false;
             }
+
             invDeque.push_back(inv);
         }
 
@@ -1464,6 +1485,7 @@ bool ProcessMessage(CNode *pfrom, std::string strCommand, CDataStream &vRecv, in
         // ignore the expedited message unless we are at the chain tip...
         if (!fImporting && !fReindex && !IsInitialBlockDownload())
         {
+            LOCK(pfrom->cs_xthinblock);
             if (!HandleExpeditedBlock(vRecv, pfrom))
             {
                 dosMan.Misbehaving(pfrom, 5);
@@ -1475,6 +1497,7 @@ bool ProcessMessage(CNode *pfrom, std::string strCommand, CDataStream &vRecv, in
     else if (strCommand == NetMsgType::XTHINBLOCK && !fImporting && !fReindex && !IsInitialBlockDownload() &&
              IsThinBlocksEnabled())
     {
+        LOCK(pfrom->cs_xthinblock);
         return CXThinBlock::HandleMessage(vRecv, pfrom, strCommand, 0);
     }
 
@@ -1482,6 +1505,7 @@ bool ProcessMessage(CNode *pfrom, std::string strCommand, CDataStream &vRecv, in
     else if (strCommand == NetMsgType::THINBLOCK && !fImporting && !fReindex && !IsInitialBlockDownload() &&
              IsThinBlocksEnabled())
     {
+        LOCK(pfrom->cs_xthinblock);
         return CThinBlock::HandleMessage(vRecv, pfrom);
     }
 
@@ -1489,6 +1513,7 @@ bool ProcessMessage(CNode *pfrom, std::string strCommand, CDataStream &vRecv, in
     else if (strCommand == NetMsgType::GET_XBLOCKTX && !fImporting && !fReindex && !IsInitialBlockDownload() &&
              IsThinBlocksEnabled())
     {
+        LOCK(pfrom->cs_xthinblock);
         return CXRequestThinBlockTx::HandleMessage(vRecv, pfrom);
     }
 
@@ -1496,6 +1521,7 @@ bool ProcessMessage(CNode *pfrom, std::string strCommand, CDataStream &vRecv, in
     else if (strCommand == NetMsgType::XBLOCKTX && !fImporting && !fReindex && !IsInitialBlockDownload() &&
              IsThinBlocksEnabled())
     {
+        LOCK(pfrom->cs_xthinblock);
         return CXThinBlockTx::HandleMessage(vRecv, pfrom);
     }
     // BUIP010 Xtreme Thinblocks: end section
@@ -1531,7 +1557,27 @@ bool ProcessMessage(CNode *pfrom, std::string strCommand, CDataStream &vRecv, in
     }
     // BUIPXXX Graphene blocks: end section
 
+    // Handle Compact Blocks
+    else if (strCommand == NetMsgType::CMPCTBLOCK && !fImporting && !fReindex && !IsInitialBlockDownload() &&
+             IsCompactBlocksEnabled())
+    {
+        LOCK(pfrom->cs_compactblock);
+        return CompactBlock::HandleMessage(vRecv, pfrom);
+    }
+    else if (strCommand == NetMsgType::GETBLOCKTXN && !fImporting && !fReindex && !IsInitialBlockDownload() &&
+             IsCompactBlocksEnabled())
+    {
+        LOCK(pfrom->cs_compactblock);
+        return CompactReRequest::HandleMessage(vRecv, pfrom);
+    }
+    else if (strCommand == NetMsgType::BLOCKTXN && !fImporting && !fReindex && !IsInitialBlockDownload() &&
+             IsCompactBlocksEnabled())
+    {
+        LOCK(pfrom->cs_compactblock);
+        return CompactReReqResponse::HandleMessage(vRecv, pfrom);
+    }
 
+    // Handle full blocks
     else if (strCommand == NetMsgType::BLOCK && !fImporting && !fReindex) // Ignore blocks received while importing
     {
         CBlockRef pblock(new CBlock());
