@@ -494,7 +494,7 @@ bool CRequestManager::RequestBlock(CNode *pfrom, CInv obj)
         if (IsGrapheneBlockEnabled() && pfrom->GrapheneCapable())
         {
             // We can only request one thin type block per peer at a time.
-            if (thinrelay.AddThinTypeBlockInFlight(pfrom, inv2.hash, NetMsgType::GRAPHENEBLOCK))
+            if (thinrelay.AddBlockInFlight(pfrom, inv2.hash, NetMsgType::GRAPHENEBLOCK))
             {
                 MarkBlockAsInFlight(pfrom->GetId(), obj.hash);
 
@@ -519,7 +519,7 @@ bool CRequestManager::RequestBlock(CNode *pfrom, CInv obj)
         if (IsThinBlocksEnabled() && pfrom->ThinBlockCapable())
         {
             // We can only request one thin type block per peer at a time.
-            if (thinrelay.AddThinTypeBlockInFlight(pfrom, inv2.hash, NetMsgType::XTHINBLOCK))
+            if (thinrelay.AddBlockInFlight(pfrom, inv2.hash, NetMsgType::XTHINBLOCK))
             {
                 MarkBlockAsInFlight(pfrom->GetId(), obj.hash);
 
@@ -546,7 +546,7 @@ bool CRequestManager::RequestBlock(CNode *pfrom, CInv obj)
         if (IsCompactBlocksEnabled() && pfrom->CompactBlockCapable())
         {
             // We can only request one thin type block per peer at a time.
-            if (thinrelay.AddThinTypeBlockInFlight(pfrom, inv2.hash, NetMsgType::CMPCTBLOCK))
+            if (thinrelay.AddBlockInFlight(pfrom, inv2.hash, NetMsgType::CMPCTBLOCK))
             {
                 MarkBlockAsInFlight(pfrom->GetId(), obj.hash);
 
@@ -1257,17 +1257,17 @@ bool CRequestManager::MarkBlockAsReceived(const uint256 &hash, CNode *pnode)
         if (IsChainNearlySyncd())
         {
             // Update Thinblock stats
-            if (thinrelay.IsThinTypeBlockInFlight(pnode, NetMsgType::XTHINBLOCK))
+            if (thinrelay.IsBlockInFlight(pnode, NetMsgType::XTHINBLOCK))
             {
                 thindata.UpdateResponseTime(nResponseTime);
             }
             // Update Graphene stats
-            if (thinrelay.IsThinTypeBlockInFlight(pnode, NetMsgType::GRAPHENEBLOCK))
+            if (thinrelay.IsBlockInFlight(pnode, NetMsgType::GRAPHENEBLOCK))
             {
                 graphenedata.UpdateResponseTime(nResponseTime);
             }
             // Update CompactBlock stats
-            if (thinrelay.IsThinTypeBlockInFlight(pnode, NetMsgType::CMPCTBLOCK))
+            if (thinrelay.IsBlockInFlight(pnode, NetMsgType::CMPCTBLOCK))
             {
                 compactdata.UpdateResponseTime(nResponseTime);
             }
