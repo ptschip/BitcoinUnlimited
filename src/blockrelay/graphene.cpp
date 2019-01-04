@@ -90,8 +90,7 @@ bool CGrapheneBlockTx::HandleMessage(CDataStream &vRecv, CNode *pfrom)
     LOG(GRAPHENE, "Received grblocktx for %s peer=%s\n", inv.hash.ToString(), pfrom->GetLogName());
     {
         // Do not process unrequested grblocktx unless from an expedited node.
-        if (!thinrelay.IsThinTypeBlockInFlight(pfrom, NetMsgType::GRAPHENEBLOCK) &&
-            !connmgr->IsExpeditedUpstream(pfrom))
+        if (!thinrelay.IsBlockInFlight(pfrom, NetMsgType::GRAPHENEBLOCK) && !connmgr->IsExpeditedUpstream(pfrom))
         {
             dosMan.Misbehaving(pfrom, 10);
             return error(
@@ -426,7 +425,7 @@ bool CGrapheneBlock::HandleMessage(CDataStream &vRecv, CNode *pfrom, std::string
                 pfrom->GetLogName(), nSizeGrapheneBlock);
 
             // Do not process unrequested grapheneblocks.
-            if (!thinrelay.IsThinTypeBlockInFlight(pfrom, NetMsgType::GRAPHENEBLOCK))
+            if (!thinrelay.IsBlockInFlight(pfrom, NetMsgType::GRAPHENEBLOCK))
             {
                 dosMan.Misbehaving(pfrom, 10);
                 return error(
@@ -1259,7 +1258,7 @@ void CGrapheneBlockData::ClearGrapheneBlockData(CNode *pnode, const uint256 &has
 {
     // We must make sure to clear the graphene block data first before clearing the graphene block in flight.
     ClearGrapheneBlockData(pnode);
-    thinrelay.ClearThinTypeBlockInFlight(pnode, hash);
+    thinrelay.ClearBlockInFlight(pnode, hash);
 }
 
 void CGrapheneBlockData::ClearGrapheneBlockStats()
@@ -1504,7 +1503,7 @@ void RequestFailoverBlock(CNode *pfrom, const uint256 &blockhash)
 {
     if (IsThinBlocksEnabled() && pfrom->ThinBlockCapable())
     {
-        if (!thinrelay.AddThinTypeBlockInFlight(pfrom, blockhash, NetMsgType::XTHINBLOCK))
+        if (!thinrelay.AddBlockInFlight(pfrom, blockhash, NetMsgType::XTHINBLOCK))
             return;
 
         LOG(GRAPHENE | THIN, "Requesting xthin block as failover from peer %s\n", pfrom->GetLogName());
@@ -1525,7 +1524,7 @@ void RequestFailoverBlock(CNode *pfrom, const uint256 &blockhash)
     }
     else if (IsCompactBlocksEnabled() && pfrom->CompactBlockCapable())
     {
-        if (!thinrelay.AddThinTypeBlockInFlight(pfrom, blockhash, NetMsgType::CMPCTBLOCK))
+        if (!thinrelay.AddBlockInFlight(pfrom, blockhash, NetMsgType::CMPCTBLOCK))
             return;
 
         LOG(GRAPHENE | CMPCT, "Requesting a compact block as failover from peer %s\n", pfrom->GetLogName());
