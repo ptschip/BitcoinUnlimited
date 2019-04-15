@@ -100,7 +100,7 @@ class BIP68_112_113Test(ComparisonTestFramework):
     def setup_network(self):
         # Must set the blockversion for this test
         self.nodes = start_nodes(1, self.options.tmpdir,
-                                 extra_args=[['-debug', '-whitelist=127.0.0.1', '-blockversion=4']],
+                                 extra_args=[['-debug=net', '-debug=bench', '-debug=parallel', '-whitelist=127.0.0.1', '-blockversion=4']],
                                  binary=[self.options.testbinary])
 
     def run_test(self):
@@ -137,6 +137,12 @@ class BIP68_112_113Test(ComparisonTestFramework):
         block = create_block(self.tip, create_coinbase(self.tipheight + 1), self.last_block_time + 600)
         block.nVersion = version
         block.vtx.extend(txs)
+        for tx in block.vtx:
+          #  tx.vout.append(CTxOut(0, CScript([OP_NOP] * 50))
+            padding_len = 100
+            padding = random.randrange(1 << 8 * padding_len -2, 1 << 8 * padding_len -1)
+            tx.vout.append(CTxOut(0, CScript([OP_RETURN, padding])))
+            tx.rehash()
         block.hashMerkleRoot = block.calc_merkle_root()
         block.rehash()
         block.solve()

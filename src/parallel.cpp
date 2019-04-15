@@ -47,7 +47,11 @@ bool CScriptCheck::operator()()
     const CScript &scriptSig = ptxTo->vin[nIn].scriptSig;
     CachingTransactionSignatureChecker checker(ptxTo, nIn, amount, nFlags, cacheStore);
     if (!VerifyScript(scriptSig, scriptPubKey, nFlags, maxOps, checker, &error, &sighashType))
+    {
+        LOG(PARALLEL, "Signature verification failed: %s\n", ScriptErrorString(GetScriptError()));
         return false;
+    }
+
     if (resourceTracker)
         resourceTracker->Update(ptxTo->GetHash(), checker.GetNumSigops(), checker.GetBytesHashed());
     return true;
@@ -542,6 +546,8 @@ void CParallelValidation::HandleBlockMessage(CNode *pfrom, const string &strComm
         // for IBD just wait for the next available
         semThreadCount.wait();
     }
+
+
 
     // Add a reference here because we are detaching a thread which may run for a long time and
     // we do not want CNode to be deleted if the node should disconnect while we are processing this block.
