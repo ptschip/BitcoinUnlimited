@@ -459,7 +459,7 @@ public:
         // May, 15 2018 hard fork is always active on regtest
         consensus.may2018Height = 0;
         // Nov, 15 2018 hard fork is always active on regtest
-        consensus.nov2018Height = 0;
+        consensus.nov2018Height = 20000;
         consensus.sv2018Height = 0;
         // Wed, 15 May 2019 12:00:00 UTC hard fork activation time
         consensus.may2019ActivationTime = 1557921600;
