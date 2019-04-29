@@ -200,7 +200,6 @@ bool CGrapheneBlockTx::HandleMessage(CDataStream &vRecv, CNode *pfrom)
     if (pblock->hashMerkleRoot != merkleroot || mutated)
     {
         thinrelay.ClearAllBlockData(pfrom, pblock);
-
         return error("Merkle root for %s does not match computed merkle root, peer=%s", inv.hash.ToString(),
             pfrom->GetLogName());
     }
@@ -663,8 +662,6 @@ static bool ReconstructBlock(CNode *pfrom,
         if (setHashes.size() != grapheneBlock->vTxHashes256.size())
         {
             thinrelay.ClearAllBlockData(pfrom, pblock);
-
-            dosMan.Misbehaving(pfrom, 10);
             return error("Repeating Transaction Id sequence, peer=%s", pfrom->GetLogName());
         }
     }
