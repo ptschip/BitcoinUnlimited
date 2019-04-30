@@ -35,7 +35,8 @@ static bool ReconstructBlock(CNode *pfrom,
     int &missingCount,
     int &unnecessaryCount,
     const std::vector<uint256> &vHashes,
-    std::shared_ptr<CBlockThinRelay> pblock);
+    std::shared_ptr<CBlockThinRelay> pblock,
+    std::string strCommand);
 
 CThinBlock::CThinBlock(const CBlock &block, const CBloomFilter &filter) : nSize(0), nWaitingFor(0)
 {
@@ -153,7 +154,8 @@ bool CThinBlock::process(CNode *pfrom, std::shared_ptr<CBlockThinRelay> pblock)
         int missingCount = 0;
         int unnecessaryCount = 0;
 
-        if (!ReconstructBlock(pfrom, missingCount, unnecessaryCount, pblock->thinblock->vTxHashes, pblock))
+        if (!ReconstructBlock(
+                pfrom, missingCount, unnecessaryCount, pblock->thinblock->vTxHashes, pblock, NetMsgType::THINBLOCK))
             return false;
 
         nWaitingForTxns = missingCount;
@@ -356,7 +358,8 @@ bool CXThinBlockTx::HandleMessage(CDataStream &vRecv, CNode *pfrom)
     // Look for each transaction in our various pools and buffers.
     // With xThinBlocks the vTxHashes contains only the first 8 bytes of the tx hash.
     {
-        if (!ReconstructBlock(pfrom, missingCount, unnecessaryCount, pblock->xthinblock->vTxHashes256, pblock))
+        if (!ReconstructBlock(pfrom, missingCount, unnecessaryCount, pblock->xthinblock->vTxHashes256, pblock,
+                NetMsgType::XTHINBLOCK))
             return false;
     }
 
@@ -689,8 +692,8 @@ bool CXThinBlock::process(CNode *pfrom, std::string strCommand, std::shared_ptr<
                 }
                 else
                 {
-                    if (!ReconstructBlock(
-                            pfrom, missingCount, unnecessaryCount, pblock->xthinblock->vTxHashes256, pblock))
+                    if (!ReconstructBlock(pfrom, missingCount, unnecessaryCount, pblock->xthinblock->vTxHashes256,
+                            pblock, NetMsgType::XTHINBLOCK))
                         return false;
                 }
             }
@@ -765,7 +768,8 @@ static bool ReconstructBlock(CNode *pfrom,
     int &missingCount,
     int &unnecessaryCount,
     const std::vector<uint256> &vHashes,
-    std::shared_ptr<CBlockThinRelay> pblock)
+    std::shared_ptr<CBlockThinRelay> pblock,
+    std::string strCommand)
 {
     // We must have all the full tx hashes by this point.  We first check for any duplicate
     // transaction ids.  This is a possible attack vector and has been used in the past.
@@ -782,11 +786,11 @@ static bool ReconstructBlock(CNode *pfrom,
     thinrelay.AddBlockBytes(::GetSerializeSize(pblock->GetBlockHeader(), SER_NETWORK, PROTOCOL_VERSION), pblock);
 
     // Look for each transaction in our various pools and buffers.
-    std::map<uint64_t, CTransactionRef> mapMissing;
-    if (pblock->xthinblock != nullptr)
-        mapMissing.insert(pblock->xthinblock->mapMissingTx.begin(), pblock->xthinblock->mapMissingTx.end());
-    if (pblock->thinblock != nullptr)
-        mapMissing.insert(pblock->thinblock->mapMissingTx.begin(), pblock->thinblock->mapMissingTx.end());
+    std::map<uint64_t, CTransactionRef> *mapMissing;
+    if (strCommand == NetMsgType::XTHINBLOCK)
+        mapMissing = &pblock->xthinblock->mapMissingTx;
+    else
+        mapMissing = &pblock->thinblock->mapMissingTx;
     for (const uint256 &hash : vHashes)
     {
         // Replace the truncated hash with the full hash value if it exists
@@ -817,21 +821,28 @@ static bool ReconstructBlock(CNode *pfrom,
             bool inOrphanCache = false;
             if (!ptx)
             {
-                if (mapMissing.count(hash.GetCheapHash()))
+                std::map<uint64_t, CTransactionRef>::iterator iter1 = mapMissing->find(hash.GetCheapHash());
+                if (iter1 != mapMissing->end())
                 {
-                    ptx = mapMissing[hash.GetCheapHash()];
-                    pblock->setUnVerifiedTxns.insert(hash);
+                    inMissingTx = true;
+                    ptx = iter1->second;
                 }
-
-                if (!ptx)
+                else
                 {
                     READLOCK(orphanpool.cs);
-                    if (orphanpool.mapOrphanTransactions.count(hash))
+                    std::map<uint256, CTxOrphanPool::COrphanTx>::iterator iter2 =
+                        orphanpool.mapOrphanTransactions.find(hash);
+                    if (iter2 != orphanpool.mapOrphanTransactions.end())
                     {
-                        ptx = orphanpool.mapOrphanTransactions[hash].ptx;
-                        pblock->setUnVerifiedTxns.insert(hash);
+                        inOrphanCache = true;
+                        ptx = iter2->second.ptx;
                     }
                 }
+
+                // XVal: these transactions still need to be verified since they were not in the mempool
+                // or CommitQ.
+                if (ptx)
+                    pblock->setUnVerifiedTxns.insert(hash);
             }
             if (((inMemPool || inCommitQ) && inMissingTx) || (inOrphanCache && inMissingTx))
                 unnecessaryCount++;
