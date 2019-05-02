@@ -3035,6 +3035,9 @@ CNode::~CNode()
     if (nMisbehavior == 0 && successfullyConnected())
         addrman.Connected(addr);
 
+    // Decrement thintype peer counters
+    thinrelay.RemovePeers(this);
+
     GetNodeSignals().FinalizeNode(GetId());
 }
 
