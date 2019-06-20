@@ -77,6 +77,9 @@ CCriticalSection cs_rpcWarmup;
 CSharedCriticalSection cs_mapBlockIndex;
 BlockMap mapBlockIndex GUARDED_BY(cs_mapBlockIndex);
 
+// The max allowed size of the in memory UTXO cache.
+std::atomic<int64_t> nCoinCacheMaxSize{0};
+
 CCriticalSection cs_main;
 CChain chainActive GUARDED_BY(cs_main); // however, chainActive.Tip() is lock free
 // BU variables moved to globals.cpp
@@ -85,8 +88,6 @@ CChain chainActive GUARDED_BY(cs_main); // however, chainActive.Tip() is lock fr
 // - movedCChain chainActive;
 std::atomic<CBlockIndex *> pindexBestHeader{nullptr};
 CFeeRate minRelayTxFee GUARDED_BY(cs_main) = CFeeRate(DEFAULT_MIN_RELAY_TX_FEE);
-// The allowed size of the in memory UTXO cache
-int64_t nCoinCacheMaxSize GUARDED_BY(cs_main) = 0;
 /** A cache to store headers that have arrived but can not yet be connected **/
 std::map<uint256, std::pair<CBlockHeader, int64_t> > mapUnConnectedHeaders GUARDED_BY(cs_main);
 CBlockIndex *pindexBestInvalid GUARDED_BY(cs_main) = nullptr;
