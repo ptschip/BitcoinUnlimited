@@ -679,7 +679,7 @@ bool FlushStateToDiskInternal(CValidationState &state,
         nLastFlush = nNow;
 
         // Trim any excess entries from the cache if needed.
-        // But never trim more than nMaxCacheIncreaseSinceLastFlush
+        // But never trim more than nMaxCacheIncreaseSinceLastFlush.
         size_t nTrimSize = nCoinCacheMaxSize * .90;
         if (nTrimSize < nCoinCacheMaxSize - nMaxCacheIncreaseSinceLastFlush)
         {

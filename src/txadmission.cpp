@@ -220,7 +220,7 @@ void ThreadCommitToMempool()
                 // trim any excess from the cache.
                 CValidationState state;
                 FlushStateToDisk(state, FLUSH_STATE_PERIODIC);
-                if (pcoinsTip->DynamicMemoryUsage() > nCoinCacheMaxSize)
+                if (pcoinsTip->DynamicMemoryUsage() > (uint64_t)nCoinCacheMaxSize)
                     pcoinsTip->Trim(nCoinCacheMaxSize * .90);
             }
 

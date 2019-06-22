@@ -852,14 +852,8 @@ void AdjustCoinCacheSize()
         // few bytes, so we'll dampen the increases by triggering only when the threshold is crossed by 5%.
         else if (nLastMemAvailable > 0 && nMemAvailable * 0.95 >= nLastMemAvailable)
         {
-            // find the max coins cache possible for this configuration.  Use the max int possible for total cache
-            // size to ensure you receive the max cache size possible.
-            int64_t dummyBlockCache, dummyUndoCache, dummyBIDiskCache, dummyUtxoDiskCache = 0;
-            CacheSizeCalculations(std::numeric_limits<long long>::max(), dummyBlockCache, dummyUndoCache,
-                dummyBIDiskCache, dummyUtxoDiskCache);
-
             nCoinCacheMaxSize = std::min(
-                (int64_t)nCoinCacheMaxSize, (int64_t)(nCoinCacheMaxSize + (nMemAvailable - nLastMemAvailable)));
+                std::numeric_limits<long long>::max(), (nCoinCacheMaxSize + (nMemAvailable - nLastMemAvailable)));
             LOG(COINDB, "Current cache size: %ld MB, nCoinCacheMaxSize was increased by %u MB\n",
                 nCoinCacheMaxSize / 1000000, (nMemAvailable - nLastMemAvailable) / 1000000);
             nLastDbAdjustment = nNow;
