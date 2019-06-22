@@ -216,11 +216,12 @@ void ThreadCommitToMempool()
                 LimitMempoolSize(mempool, GetArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000,
                     GetArg("-mempoolexpiry", DEFAULT_MEMPOOL_EXPIRY) * 60 * 60);
 
+                // The flush to disk above is only periodic therefore we need to check whether we need to
+                // trim any excess from the cache.
                 CValidationState state;
                 FlushStateToDisk(state, FLUSH_STATE_PERIODIC);
-                // The flush to disk above is only periodic therefore we need to continuously trim any excess from the
-                // cache.
-                pcoinsTip->Trim(nCoinCacheMaxSize);
+                if (pcoinsTip->DynamicMemoryUsage() > nCoinCacheMaxSize)
+                    pcoinsTip->Trim(nCoinCacheMaxSize * .90);
             }
 
             mempool.check(pcoinsTip);
