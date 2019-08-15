@@ -16,7 +16,7 @@
 #include <util/moneystr.h> // For FormatMoney
 #include <version.h>       // For PROTOCOL_VERSION
 
-static bool IsFinalTx(const CTransaction &tx, int nBlockHeight,
+bool IsFinalTx(const CTransaction &tx, int nBlockHeight,
                       int64_t nBlockTime) {
     if (tx.nLockTime == 0) {
         return true;

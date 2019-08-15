@@ -321,8 +321,14 @@ public:
         double f1 = a_mod_fee * b_size;
         double f2 = a_size * b_mod_fee;
 
-        if (f1 == f2) {
-            return a.GetTx().GetId() < b.GetTx().GetId();
+        if (f1 == f2)
+        {
+            // Sorting by time here does two things when mining CPFP packages. In the case of long
+            // packages, it finds the part of the package that fits perfectly into the block, because
+            // we won't bail out early due to package insertion failures. Secondly it also preserves some
+            // sense of fairness that, all other things begin equal, the first transation to arrive in the
+            // mempool has priority over ones that follow.
+            return a.GetTime() < b.GetTime();
         }
         return f1 > f2;
     }
@@ -706,7 +712,8 @@ public:
         const CTxMemPoolEntry &entry, setEntries &setAncestors,
         uint64_t limitAncestorCount, uint64_t limitAncestorSize,
         uint64_t limitDescendantCount, uint64_t limitDescendantSize,
-        std::string &errString, bool fSearchForParents = true) const
+        std::string &errString, setEntries *inBlock = nullptr,
+        bool fSearchForParents = true) const
         EXCLUSIVE_LOCKS_REQUIRED(cs);
 
     /**

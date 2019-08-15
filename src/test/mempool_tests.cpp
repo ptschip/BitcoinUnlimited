@@ -511,15 +511,10 @@ BOOST_AUTO_TEST_CASE(MempoolAncestorIndexingTest) {
     sortedOrder[0] = tx2.GetId().ToString(); // 20000
     sortedOrder[1] = tx4.GetId().ToString(); // 15000
     // tx1 and tx5 are both 10000
-    // Ties are broken by hash, not timestamp, so determine which hash comes
-    // first.
-    if (tx1.GetId() < tx5.GetId()) {
-        sortedOrder[2] = tx1.GetId().ToString();
-        sortedOrder[3] = tx5.GetId().ToString();
-    } else {
-        sortedOrder[2] = tx5.GetId().ToString();
-        sortedOrder[3] = tx1.GetId().ToString();
-    }
+    // Ties are broken by timestamp, so determine which
+    // time comes first.
+    sortedOrder[2] = tx1.GetId().ToString();
+    sortedOrder[3] = tx5.GetId().ToString();
     sortedOrder[4] = tx3.GetId().ToString(); // 0
 
     CheckSort<ancestor_score>(pool, sortedOrder,
@@ -533,15 +528,11 @@ BOOST_AUTO_TEST_CASE(MempoolAncestorIndexingTest) {
     tx6.vout[0].nValue = 20 * COIN;
     uint64_t tx6Size = CTransaction(tx6).GetTotalSize();
 
-    pool.addUnchecked(tx6.GetId(), entry.Fee(Amount::zero()).FromTx(tx6));
-    BOOST_CHECK_EQUAL(pool.size(), 6UL);
-    // Ties are broken by hash
-    if (tx3.GetId() < tx6.GetId()) {
-        sortedOrder.push_back(tx6.GetId().ToString());
-    } else {
-        sortedOrder.insert(sortedOrder.end() - 1, tx6.GetId().ToString());
-    }
-
+    Amount zerofee;
+    pool.addUnchecked(tx6.GetId(), entry.Fee(zerofee).Time(GetTime() + 6).FromTx(tx6));
+    BOOST_CHECK_EQUAL(pool.size(), 6);
+    // Ties are broken by time
+    sortedOrder.push_back(tx6.GetId().ToString());
     CheckSort<ancestor_score>(pool, sortedOrder,
                               "MempoolAncestorIndexingTest2");
 
@@ -558,8 +549,8 @@ BOOST_AUTO_TEST_CASE(MempoolAncestorIndexingTest) {
     Amount fee = int64_t((20000 / tx2Size) * (tx7Size + tx6Size) - 1) * SATOSHI;
 
     // CTxMemPoolEntry entry7(tx7, fee, 2, 10.0, 1, true);
-    pool.addUnchecked(tx7.GetId(), entry.Fee(Amount(fee)).FromTx(tx7));
-    BOOST_CHECK_EQUAL(pool.size(), 7UL);
+    pool.addUnchecked(tx7.GetId(), entry.Fee(fee).Time(GetTime() + 7).FromTx(tx7));
+    BOOST_CHECK_EQUAL(pool.size(), 7);
     sortedOrder.insert(sortedOrder.begin() + 1, tx7.GetId().ToString());
     CheckSort<ancestor_score>(pool, sortedOrder,
                               "MempoolAncestorIndexingTest3");
@@ -570,12 +561,8 @@ BOOST_AUTO_TEST_CASE(MempoolAncestorIndexingTest) {
     pool.removeForBlock(vtx, 1);
 
     sortedOrder.erase(sortedOrder.begin() + 1);
-    // Ties are broken by hash
-    if (tx3.GetId() < tx6.GetId()) {
-        sortedOrder.pop_back();
-    } else {
-        sortedOrder.erase(sortedOrder.end() - 2);
-    }
+    // Ties are broken by time
+    sortedOrder.pop_back();
     sortedOrder.insert(sortedOrder.begin(), tx7.GetId().ToString());
     CheckSort<ancestor_score>(pool, sortedOrder,
                               "MempoolAncestorIndexingTest4");

@@ -615,7 +615,7 @@ static UniValue getmempoolancestors(const Config &config,
     uint64_t noLimit = std::numeric_limits<uint64_t>::max();
     std::string dummy;
     g_mempool.CalculateMemPoolAncestors(*it, setAncestors, noLimit, noLimit,
-                                        noLimit, noLimit, dummy, false);
+                                        noLimit, noLimit, dummy, nullptr, false);
 
     if (!fVerbose) {
         UniValue o(UniValue::VARR);

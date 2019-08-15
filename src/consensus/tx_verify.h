@@ -37,6 +37,8 @@ bool CheckTxInputs(const CTransaction &tx, CValidationState &state,
 
 } // namespace Consensus
 
+bool IsFinalTx(const CTransaction &tx, int nBlockHeight, int64_t nBlockTime);
+
 /**
  * Context dependent validity checks for non coinbase transactions. This
  * doesn't check the validity of the transaction against the UTXO set, but

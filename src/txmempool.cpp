@@ -182,79 +182,113 @@ bool CTxMemPool::CalculateMemPoolAncestors(
     const CTxMemPoolEntry &entry, setEntries &setAncestors,
     uint64_t limitAncestorCount, uint64_t limitAncestorSize,
     uint64_t limitDescendantCount, uint64_t limitDescendantSize,
-    std::string &errString, bool fSearchForParents /* = true */) const {
+    std::string &errString, setEntries *inBlock /* = nullptr */,
+    bool fSearchForParents /* = true */) const
+{
+
+    // inBlock and fSearchForParents can not both be true.
+    bool fBothTrue = (inBlock && fSearchForParents);
+    assert(!fBothTrue);
 
     setEntries parentHashes;
     const CTransaction &tx = entry.GetTx();
 
-    if (fSearchForParents) {
+    if (fSearchForParents)
+    {
         // Get parents of this transaction that are in the mempool
         // GetMemPoolParents() is only valid for entries in the mempool, so we
         // iterate mapTx to find parents.
-        for (const CTxIn &in : tx.vin) {
+        for (const CTxIn &in : tx.vin)
+        {
             txiter piter = mapTx.find(in.prevout.GetTxId());
             if (piter == mapTx.end()) {
                 continue;
             }
             parentHashes.insert(piter);
-            if (parentHashes.size() + 1 > limitAncestorCount) {
-                errString =
-                    strprintf("too many unconfirmed parents [limit: %u]",
-                              limitAncestorCount);
+            if (parentHashes.size() + 1 > limitAncestorCount)
+            {
+                errString = strprintf(
+                    "too many unconfirmed parents: %u [limit: %u]", parentHashes.size(), limitAncestorCount);
                 return false;
             }
         }
-    } else {
-        // If we're not searching for parents, we require this to be an entry in
-        // the mempool already.
+    }
+    else
+    {
+        // If we're not searching for parents, we require this to be an
+        // entry in the mempool already.
         txiter it = mapTx.iterator_to(entry);
         parentHashes = GetMemPoolParents(it);
     }
 
     size_t totalSizeWithAncestors = entry.GetTxSize();
 
-    while (!parentHashes.empty()) {
+    while (!parentHashes.empty())
+    {
         txiter stageit = *parentHashes.begin();
 
-        setAncestors.insert(stageit);
-        parentHashes.erase(stageit);
+        // If inBlock then we only return a set of ancestors that have not yet been added to a block.
+        //
+        // Once we find a parent that is in a block we stop looking further on that ancestor chain, because
+        // if that parent is in the block then all of it's ancestors must also be in the block.
+        if (inBlock)
+        {
+            if (!inBlock->count(stageit))
+                setAncestors.insert(stageit);
+        }
+        else
+        {
+            setAncestors.insert(stageit);
+        }
+
         totalSizeWithAncestors += stageit->GetTxSize();
 
-        if (stageit->GetSizeWithDescendants() + entry.GetTxSize() >
-            limitDescendantSize) {
-            errString = strprintf(
-                "exceeds descendant size limit for tx %s [limit: %u]",
-                stageit->GetTx().GetId().ToString(), limitDescendantSize);
+        if (stageit->GetSizeWithDescendants() + entry.GetTxSize() > limitDescendantSize)
+        {
+            errString = strprintf("exceeds descendant size limit for tx %s [limit: %u]",
+                stageit->GetTx().GetHash().ToString(), limitDescendantSize);
             return false;
         }
-
-        if (stageit->GetCountWithDescendants() + 1 > limitDescendantCount) {
-            errString = strprintf("too many descendants for tx %s [limit: %u]",
-                                  stageit->GetTx().GetId().ToString(),
-                                  limitDescendantCount);
+        else if (stageit->GetCountWithDescendants() + 1 > limitDescendantCount)
+        {
+            errString = strprintf("too many descendants for tx %s [limit: %u]", stageit->GetTx().GetHash().ToString(),
+                limitDescendantCount);
             return false;
         }
-
-        if (totalSizeWithAncestors > limitAncestorSize) {
-            errString = strprintf("exceeds ancestor size limit [limit: %u]",
-                                  limitAncestorSize);
+        else if (totalSizeWithAncestors > limitAncestorSize)
+        {
+            errString =
+                strprintf(" %u exceeds ancestor size limit [limit: %u]", totalSizeWithAncestors, limitAncestorSize);
             return false;
         }
 
         const setEntries &setMemPoolParents = GetMemPoolParents(stageit);
-        for (txiter phash : setMemPoolParents) {
+        for (const txiter &phash : setMemPoolParents)
+        {
             // If this is a new ancestor, add it.
-            if (setAncestors.count(phash) == 0) {
-                parentHashes.insert(phash);
+            if (setAncestors.count(phash) == 0)
+            {
+                if (inBlock)
+                {
+                    if (!inBlock->count(phash))
+                        parentHashes.insert(phash);
+                }
+                else
+                {
+                    parentHashes.insert(phash);
+                }
             }
-            if (parentHashes.size() + setAncestors.size() + 1 >
-                limitAncestorCount) {
-                errString =
-                    strprintf("too many unconfirmed ancestors [limit: %u]",
-                              limitAncestorCount);
+
+            // removed +1 from test below as per BU: Fix use after free bug
+            if (parentHashes.size() + setAncestors.size() > limitAncestorCount)
+            {
+                errString = strprintf("too many unconfirmed ancestors (%u+%u) [limit: %u]", parentHashes.size(),
+                    setAncestors.size(), limitAncestorCount);
                 return false;
             }
         }
+
+        parentHashes.erase(stageit); // BU: Fix use after free bug by removing this last
     }
 
     return true;
@@ -346,7 +380,7 @@ void CTxMemPool::UpdateForRemoveFromMempool(const setEntries &entriesToRemove,
         // the mapLinks[] notion of ancestor transactions as the set of things
         // to update for removal.
         CalculateMemPoolAncestors(entry, setAncestors, nNoLimit, nNoLimit,
-                                  nNoLimit, nNoLimit, dummy, false);
+                                   nNoLimit, nNoLimit, dummy, nullptr, false);
         // Note that UpdateAncestorsOf severs the child links that point to
         // removeIt in the entries for the parents of removeIt.
         UpdateAncestorsOf(false, removeIt, setAncestors);
@@ -951,7 +985,7 @@ void CTxMemPool::PrioritiseTransaction(const uint256 &hash,
             uint64_t nNoLimit = std::numeric_limits<uint64_t>::max();
             std::string dummy;
             CalculateMemPoolAncestors(*it, setAncestors, nNoLimit, nNoLimit,
-                                      nNoLimit, nNoLimit, dummy, false);
+                                      nNoLimit, nNoLimit, dummy, nullptr, false);
             for (txiter ancestorIt : setAncestors) {
                 mapTx.modify(ancestorIt,
                              update_descendant_state(0, nFeeDelta, 0));

@@ -110,6 +110,8 @@ static void TestPackageSelection(const CChainParams &chainparams,
     // Test the ancestor feerate transaction selection.
     TestMemPoolEntryHelper entry;
 
+    gArgs.ForceSetArg("-blockprioritysize", std::to_string(0));
+
     // Test that a medium fee transaction will be selected after a higher fee
     // rate package with a low fee rate parent.
     CMutableTransaction tx;
@@ -145,17 +147,23 @@ static void TestPackageSelection(const CChainParams &chainparams,
                                             .SpendsCoinbase(false)
                                             .FromTx(tx));
 
+
     std::unique_ptr<CBlockTemplate> pblocktemplate =
         AssemblerForTest(chainparams, g_mempool).CreateNewBlock(scriptPubKey);
-    BOOST_CHECK(pblocktemplate->block.vtx[1]->GetId() == parentTxId);
-    BOOST_CHECK(pblocktemplate->block.vtx[2]->GetId() == highFeeTxId);
+    BOOST_CHECK(pblocktemplate->block.vtx[2]->GetId() == parentTxId);
+    BOOST_CHECK(pblocktemplate->block.vtx[1]->GetId() == highFeeTxId);
     BOOST_CHECK(pblocktemplate->block.vtx[3]->GetId() == mediumFeeTxId);
 
     // Test that a package below the block min tx fee doesn't get included
-    tx.vin[0].prevout = COutPoint(highFeeTxId, 0);
-    // 0 fee.
-    tx.vout[0].nValue = int64_t(5000000000LL - 1000 - 50000) * SATOSHI;
+    // This tx has a zero fee in satoshis.
+    tx.vin[0].prevout = COutPoint(txFirst[3]->GetId(), 0);
+    tx.vout[0].nValue = int64_t(5000000000LL - 0) * SATOSHI;
     TxId freeTxId = tx.GetId();
+    g_mempool.addUnchecked(mediumFeeTxId, entry.Fee(0 * SATOSHI)
+                                              .Time(GetTime())
+                                              .SpendsCoinbase(true)
+                                              .FromTx(tx));
+
     g_mempool.addUnchecked(freeTxId, entry.Fee(Amount::zero()).FromTx(tx));
     size_t freeTxSize = GetVirtualTransactionSize(CTransaction(tx));
 
@@ -187,8 +195,8 @@ static void TestPackageSelection(const CChainParams &chainparams,
                            entry.Fee(feeToUse + 2 * SATOSHI).FromTx(tx));
     pblocktemplate =
         AssemblerForTest(chainparams, g_mempool).CreateNewBlock(scriptPubKey);
-    BOOST_CHECK(pblocktemplate->block.vtx[4]->GetId() == freeTxId);
-    BOOST_CHECK(pblocktemplate->block.vtx[5]->GetId() == lowFeeTxId);
+    BOOST_CHECK(pblocktemplate->block.vtx[5]->GetId() == freeTxId);
+    BOOST_CHECK(pblocktemplate->block.vtx[4]->GetId() == lowFeeTxId);
 
     // Test that transaction selection properly updates ancestor fee
     // calculations as ancestor transactions get included in a block. Add a
@@ -223,11 +231,31 @@ static void TestPackageSelection(const CChainParams &chainparams,
     // well.
     tx.vin[0].prevout = COutPoint(freeTxId2, 1);
     // 10k satoshi fee.
-    tx.vout[0].nValue = (100000000 - 10000) * SATOSHI;
+    tx.vout[0].nValue = int64_t(100000000LL - 10000) * SATOSHI;
+    TxId highFeeTxId2 = tx.GetId();
     g_mempool.addUnchecked(tx.GetId(), entry.Fee(10000 * SATOSHI).FromTx(tx));
     pblocktemplate =
         AssemblerForTest(chainparams, g_mempool).CreateNewBlock(scriptPubKey);
     BOOST_CHECK(pblocktemplate->block.vtx[8]->GetId() == lowFeeTxId2);
+
+    // Test CPFP with AGT (ancestor grouped transactions)
+    // Add another 0 fee tx to a higher fee tx chain. This should also get mined
+    // because the total package fees will still be above the minrelaytxfe
+    tx.vin[0].prevout = COutPoint(highFeeTxId2, 0);
+    tx.vout[0].nValue = int64_t(100000000LL - 10000) * SATOSHI; // 0 fee
+    TxId freeTxId3 = tx.GetId();
+    g_mempool.addUnchecked(freeTxId3, entry.Fee(0 * SATOSHI).SpendsCoinbase(false).FromTx(tx));
+    pblocktemplate =
+        AssemblerForTest(chainparams, g_mempool).CreateNewBlock(scriptPubKey);
+
+    // Although freeTxId3 is a zero fee it still gets mined before lowFeeTx2 which
+    // has a higher fee. This is because freeTxId3 is part of the ancestor grouping
+    // along with highFeeTx2 and freeTxId2 and since it's "group" fee is higher
+    // than lowFeeTx2 then it will get mined first.
+    BOOST_CHECK(pblocktemplate->block.vtx[4]->GetHash() == freeTxId2);
+    BOOST_CHECK(pblocktemplate->block.vtx[5]->GetHash() == highFeeTxId2);
+    BOOST_CHECK(pblocktemplate->block.vtx[8]->GetHash() == lowFeeTxId2);
+    BOOST_CHECK(pblocktemplate->block.vtx[9]->GetHash() == freeTxId3);
 }
 
 void TestCoinbaseMessageEB(uint64_t eb, std::string cbmsg) {
