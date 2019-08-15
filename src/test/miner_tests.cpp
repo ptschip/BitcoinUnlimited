@@ -24,7 +24,25 @@
 
 #include <boost/test/unit_test.hpp>
 
+extern int64_t nTotalLoop;
+extern int64_t nStart0Total;
+extern int64_t nStart1Total;
+extern int64_t nStart1aTotal;
+extern int64_t nStart2Total;
+extern int64_t nStart3Total;
+extern int64_t nStart4Total;
+extern int64_t nStart5Total;
+extern int64_t nStart6Total;
+extern int64_t nStart7Total;
+extern int64_t nStart8Total;
+extern int64_t nStart9Total;
+extern int64_t nStart10Total;
+
 BOOST_FIXTURE_TEST_SUITE(miner_tests, TestingSetup)
+
+int64_t nStartTime = GetTime();
+
+
 
 // BOOST_CHECK_EXCEPTION predicates to check the specific validation error
 class HasReason
@@ -195,6 +213,15 @@ void TestPackageSelection(const CChainParams &chainparams, CScript scriptPubKey,
 // NOTE: These tests rely on CreateNewBlock doing its own self-validation!
 BOOST_AUTO_TEST_CASE(CreateNewBlock_validity)
 {
+/*
+nTotalLoop = 0;
+nStart1Total= 0;
+nStart1aTotal= 0;
+nStart2Total= 0;
+nStart3Total= 0;
+nStart4Total= 0;
+nStart5Total= 0;
+*/
     const CChainParams &chainparams = Params(CBaseChainParams::MAIN);
     const CChainParams &chainparams_regtest = Params(CBaseChainParams::REGTEST);
     CScript scriptPubKey = CScript() << ParseHex("04678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f"
@@ -612,6 +639,22 @@ BOOST_AUTO_TEST_CASE(CreateNewBlock_validity)
     TestPackageSelection(chainparams, scriptPubKey, txFirst);
 
     fCheckpointsEnabled = true;
+
+printf("Test took %ld seconds\n", GetTime() - nStartTime);
+printf("nTotalLoop %5.2f\n", (double)nTotalLoop/1000000);
+printf("nStart0Total %5.2f\n", (double)nStart0Total/1000000);
+printf("nStart1Total %5.2f\n", (double)nStart1Total/1000000);
+printf("nStart1aTotal %5.2f\n", (double)nStart1aTotal/1000000);
+printf("nStart2Total %5.2f\n", (double)nStart2Total/1000000);
+printf("nStart3Total %5.2f\n", (double)nStart3Total/1000000);
+printf("nStart4Total %5.2f\n", (double)nStart4Total/1000000);
+printf("nStart5Total %5.2f\n", (double)nStart5Total/1000000);
+printf("nStart6Total %5.2f\n", (double)nStart6Total/1000000);
+printf("nStart7Total %5.2f\n", (double)nStart7Total/1000000);
+printf("nStart8Total %5.2f\n", (double)nStart8Total/1000000);
+printf("nStart9Total %5.2f\n", (double)nStart9Total/1000000);
+printf("nStart10Total %5.2f\n", (double)nStart10Total/1000000);
+
 }
 
 BOOST_AUTO_TEST_SUITE_END()

@@ -655,16 +655,16 @@ void CTxMemPool::_CalculateDescendants(txiter entryit, setEntries &setDescendant
     setEntries stage;
     if (setDescendants.count(entryit) == 0)
     {
-        stage.insert(entryit);
+        stage.emplace(entryit);
     }
     // Traverse down the children of entry, only adding children that are not
     // accounted for in setDescendants already (because those children have either
     // already been walked, or will be walked in this iteration).
     while (!stage.empty())
     {
-        txiter it = *stage.begin();
+        const txiter it = *stage.begin();
         setDescendants.insert(it);
-        stage.erase(it); // BU its ok to erase here because GetMemPoolChildren does not dereference it
+        stage.erase(it); // we can erase here because GetMemPoolChildren does not dereference it
 
         const setEntries &setChildren = GetMemPoolChildren(it);
         for (const txiter &childiter : setChildren)

@@ -25,12 +25,34 @@ class CWallet;
 extern CScript COINBASE_FLAGS;
 extern CCriticalSection cs_coinbaseFlags;
 
+extern int64_t nTotalLoop;
+extern int64_t nStart0Total;
+extern int64_t nStart1Total;
+extern int64_t nStart1aTotal;
+extern int64_t nStart2Total;
+extern int64_t nStart3Total;
+extern int64_t nStart4Total;
+extern int64_t nStart5Total;
+extern int64_t nStart6Total;
+extern int64_t nStart7Total;
+extern int64_t nStart8Total;
+extern int64_t nStart9Total;
+extern int64_t nStart10Total;
+/*
+int64_t nTotalLoop = 0;
+int64_t nStart1Total= 0;
+int64_t nStart2Total= 0;
+int64_t nStart3Total= 0;
+int64_t nStart4Total= 0;
+int64_t nStart5Total= 0;
+*/
 namespace Consensus
 {
 struct Params;
 };
 
 static const bool DEFAULT_PRINTPRIORITY = false;
+
 
 struct CBlockTemplate
 {

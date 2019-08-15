@@ -36,6 +36,20 @@
 #include <queue>
 #include <thread>
 
+int64_t nTotalLoop = 0;
+int64_t nStart0Total= 0;
+int64_t nStart1Total= 0;
+int64_t nStart1aTotal= 0;
+int64_t nStart2Total= 0;
+int64_t nStart3Total= 0;
+int64_t nStart4Total= 0;
+int64_t nStart5Total= 0;
+int64_t nStart6Total= 0;
+int64_t nStart7Total= 0;
+int64_t nStart8Total= 0;
+int64_t nStart9Total= 0;
+int64_t nStart10Total= 0;
+
 using namespace std;
 
 //////////////////////////////////////////////////////////////////////////////
@@ -523,9 +537,13 @@ void BlockAssembler::UpdatePackagesForAdded(const CTxMemPool::setEntries &alread
 
     for (const CTxMemPool::txiter it : alreadyAdded)
     {
+    int64_t nStart8 = GetTimeMicros();
         CTxMemPool::setEntries descendants;
         mempool._CalculateDescendants(it, descendants);
+    nStart8Total +=  GetTimeMicros() - nStart8;
         // Insert all descendants (not yet in block) into the modified set
+    int64_t nStart9 = GetTimeMicros();
+//printf("desc size: %ld\n", descendants.size());
         for (CTxMemPool::txiter desc : descendants)
         {
             if (alreadyAdded.count(desc))
@@ -541,9 +559,12 @@ void BlockAssembler::UpdatePackagesForAdded(const CTxMemPool::setEntries &alread
             }
             else
             {
+    int64_t nStart10 = GetTimeMicros();
                 mapModifiedTx.modify(mit, update_for_parent_inclusion(it));
+    nStart10Total +=  GetTimeMicros() - nStart10;
             }
         }
+    nStart9Total +=  GetTimeMicros() - nStart9;
     }
 }
 
@@ -606,20 +627,26 @@ void BlockAssembler::addPackageTxs(std::vector<const CTxMemPoolEntry *> *vtxe)
     CTxMemPool::indexed_transaction_set::index<ancestor_score>::type::iterator mi =
         mempool.mapTx.get<ancestor_score>().begin();
     CTxMemPool::txiter iter;
+
+    int64_t nStartLoop = GetTimeMicros();
     while (mi != mempool.mapTx.get<ancestor_score>().end() || !mapModifiedTx.empty())
     {
         // First try to find a new transaction in mapTx to evaluate.
+    int64_t nStart0 = GetTimeMicros();
         if (mi != mempool.mapTx.get<ancestor_score>().end() &&
             SkipMapTxEntry(mempool.mapTx.project<0>(mi), mapModifiedTx, failedTx))
         {
             ++mi;
+            nStart0Total += GetTimeMicros() - nStart0;
             continue;
         }
+    nStart0Total += GetTimeMicros() - nStart0;
 
         // Now that mi is not stale, determine which transaction to evaluate:
         // the next entry from mapTx, or the best from mapModifiedTx?
         bool fUsingModified = false;
 
+    int64_t nStart1 = GetTimeMicros();
         modtxscoreiter modit = mapModifiedTx.get<ancestor_score>().begin();
         if (mi == mempool.mapTx.get<ancestor_score>().end())
         {
@@ -647,7 +674,9 @@ void BlockAssembler::addPackageTxs(std::vector<const CTxMemPoolEntry *> *vtxe)
                 ++mi;
             }
         }
+    nStart1Total += GetTimeMicros() - nStart1;
 
+    int64_t nStart1a = GetTimeMicros();
         // We skip mapTx entries that are inBlock, and mapModifiedTx shouldn't
         // contain anything that is inBlock.
         assert(!inBlock.count(iter));
@@ -665,9 +694,12 @@ void BlockAssembler::addPackageTxs(std::vector<const CTxMemPoolEntry *> *vtxe)
         if (packageFees < ::minRelayTxFee.GetFee(packageSize) && nBlockSize >= nBlockMinSize)
         {
             // Everything else we might consider has a lower fee rate
+    nStart1aTotal += GetTimeMicros() - nStart1a;
             return;
         }
+    nStart1aTotal += GetTimeMicros() - nStart1a;
 
+    int64_t nStart2 = GetTimeMicros();
         if (!TestPackage(packageSize, packageSigOps))
         {
             if (fUsingModified)
@@ -678,14 +710,20 @@ void BlockAssembler::addPackageTxs(std::vector<const CTxMemPoolEntry *> *vtxe)
                 mapModifiedTx.get<ancestor_score>().erase(modit);
                 failedTx.insert(iter);
             }
+    nStart2Total +=  GetTimeMicros() - nStart2;
             continue;
         }
+    nStart2Total +=  GetTimeMicros() - nStart2;
 
+    int64_t nStart3 = GetTimeMicros();
         CTxMemPool::setEntries ancestors;
         uint64_t nNoLimit = std::numeric_limits<uint64_t>::max();
         std::string dummy;
         mempool._CalculateMemPoolAncestors(*iter, ancestors, nNoLimit, nNoLimit, nNoLimit, nNoLimit, dummy, false);
+//printf("anscestor size %ld\n", ancestors.size());
+    nStart3Total +=  GetTimeMicros() - nStart3;
 
+    int64_t nStart4 = GetTimeMicros();
         onlyUnconfirmed(ancestors);
         ancestors.insert(iter);
 
@@ -697,23 +735,33 @@ void BlockAssembler::addPackageTxs(std::vector<const CTxMemPoolEntry *> *vtxe)
                 mapModifiedTx.get<ancestor_score>().erase(modit);
                 failedTx.insert(iter);
             }
-            continue;
+     nStart4Total +=  GetTimeMicros() - nStart4;
+           continue;
         }
+    nStart4Total +=  GetTimeMicros() - nStart4;
 
         // Package can be added. Sort the entries in a valid order.
+    int64_t nStart5 = GetTimeMicros();
         vector<CTxMemPool::txiter> sortedEntries;
         SortForBlock(ancestors, iter, sortedEntries);
+    nStart5Total +=  GetTimeMicros() - nStart5;
 
+    int64_t nStart6 = GetTimeMicros();
         for (size_t i = 0; i < sortedEntries.size(); ++i)
         {
             AddToBlock(vtxe, sortedEntries[i]);
             // Erase from the modified set, if present
             mapModifiedTx.erase(sortedEntries[i]);
         }
+    nStart6Total +=  GetTimeMicros() - nStart6;
 
         // Update transactions that depend on each of these
+    int64_t nStart7 = GetTimeMicros();
         UpdatePackagesForAdded(ancestors, mapModifiedTx);
+    nStart7Total +=  GetTimeMicros() - nStart7;
     }
+    nTotalLoop += GetTimeMicros() - nStartLoop;
+
 }
 
 void BlockAssembler::addPriorityTxs(std::vector<const CTxMemPoolEntry *> *vtxe)
