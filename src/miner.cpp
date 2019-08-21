@@ -355,8 +355,6 @@ void BlockAssembler::onlyUnconfirmed(CTxMemPool::setEntries &testSet)
 
 bool BlockAssembler::TestPackage(uint64_t packageSize, unsigned int packageSigOps)
 {
-    if (nBlockSize + packageSize >= nBlockMaxSize)
-        return false;
     uint64_t blockMbSize = 1 + (nBlockSize + packageSize - 1) / 1000000;
     uint64_t nMaxSigOpsAllowed =  blockMiningSigopsPerMb.Value() * blockMbSize;
     if (nBlockSigOps + packageSigOps >= nMaxSigOpsAllowed)
@@ -629,6 +627,7 @@ void BlockAssembler::addPackageTxs(std::vector<const CTxMemPoolEntry *> *vtxe)
     CTxMemPool::txiter iter;
 
     int64_t nStartLoop = GetTimeMicros();
+    uint64_t nPackageFailure = 0;
     while (mi != mempool.mapTx.get<ancestor_score>().end() || !mapModifiedTx.empty())
     {
         // First try to find a new transaction in mapTx to evaluate.
@@ -694,10 +693,24 @@ void BlockAssembler::addPackageTxs(std::vector<const CTxMemPoolEntry *> *vtxe)
         if (packageFees < ::minRelayTxFee.GetFee(packageSize) && nBlockSize >= nBlockMinSize)
         {
             // Everything else we might consider has a lower fee rate
+    nTotalLoop += GetTimeMicros() - nStartLoop;
     nStart1aTotal += GetTimeMicros() - nStart1a;
             return;
         }
     nStart1aTotal += GetTimeMicros() - nStart1a;
+
+        // If we keeps failing then the block must be almost full so bail out here.
+        if (nBlockSize + packageSize >= nBlockMaxSize)
+        {
+            nPackageFailure++;
+            if (nPackageFailure >= 3)
+{
+    nTotalLoop += GetTimeMicros() - nStartLoop;
+                return;
+}
+            else
+                continue;
+        }
 
     int64_t nStart2 = GetTimeMicros();
         if (!TestPackage(packageSize, packageSigOps))
