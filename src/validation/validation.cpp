@@ -1618,10 +1618,39 @@ bool CheckBlock(const CBlock &block, CValidationState &state, bool fCheckPOW, bo
             return state.DoS(100, error("CheckBlock(): more than one coinbase"), REJECT_INVALID, "bad-cb-multiple");
 
     // Check transactions
+    uint256 prevTxHash;
+    unsigned int i = 0;
     for (const auto &tx : block.vtx)
+    {
         if (!CheckTransaction(tx, state))
+        {
             return error("CheckBlock(): CheckTransaction of %s failed with %s", tx->GetHash().ToString(),
                 FormatStateMessage(state));
+        }
+
+        if (fCanonicalTxsOrder)
+        {
+            if (i == 1)
+            {
+                prevTxHash = tx->GetHash();
+            }
+            else if (i != 0)
+            {
+                uint256 curTxHash = tx->GetHash();
+
+                if (curTxHash < prevTxHash)
+                {
+                    return state.DoS(100,
+                        error("%s: block %s lexical misordering tx %d (%s < %s)", __func__, block.GetHash().ToString(),
+                                         i, curTxHash.ToString(), prevTxHash.ToString()),
+                        REJECT_INVALID, "bad-txn-order");
+                }
+
+                prevTxHash = curTxHash;
+            }
+            i++;
+        }
+    }
 
 
     if (fCheckPOW && fCheckMerkleRoot)
@@ -2008,6 +2037,8 @@ bool ConnectBlockPrevalidations(const CBlock &block,
     // In addition, if we had just restarted the node and continued IBD, started a Reindex, or found a new block
     // then setBlockAlreadyChecked would be empty and we'd have to run CheckBlock() at least one time, which is
     // correct behavior.
+    // Check it again in case a previous version let a bad block in
+    if (!CheckBlock(block, state, !fJustCheck, !fJustCheck))
     {
         bool fAlreadyChecked = true;
         {
@@ -2125,211 +2156,173 @@ static void ConnectBlockScopeExit(bool fParallel,
     PV->SetLocks(fParallel);
 }
 
-bool ConnectBlockDependencyOrdering(const CBlock &block,
-    CValidationState &state,
-    CBlockIndex *pindex,
-    CCoinsViewCache &view,
-    const CChainParams &chainparams,
-    bool fJustCheck,
-    bool fParallel,
-    bool fScriptChecks,
-    CAmount &nFees,
-    CBlockUndo &blockundo,
-    std::vector<std::pair<uint256, CDiskTxPos> > &vPos)
+// Data we pass to the validation threads using a shared pointer. After the thread
+// runs some data still needs to be preseved by the shared pointer to be used after
+// the threads have finished running.
+struct CRunValidationThread
 {
-    nFees = 0;
-    int64_t nTime2 = GetStopwatchMicros();
-    LOG(BLK, "Dependency ordering for %s MTP: %d\n", block.GetHash().ToString(), pindex->GetMedianTimePast());
-
-    // Start enforcing BIP68 (sequence locks) and BIP112 (CHECKSEQUENCEVERIFY)
+    // Initialized here on construction but will be modified
+    // and used locally only.
+    std::shared_ptr<CCoinsViewCache> pView;
+    CBlockIndex *pindex;
+    const CBlock *block;
+    CCheckQueueControl<CScriptCheck> *control;
+    boost::thread::id main_thread_id;
+    uint32_t flags = 0;
     int nLockTimeFlags = 0;
-    if (pindex->nHeight >= chainparams.GetConsensus().BIP68Height)
-    {
-        nLockTimeFlags |= LOCKTIME_VERIFY_SEQUENCE;
-    }
+    uint32_t nBeginIndex = 0;
+    uint32_t nEndIndex = 0;
+    bool fJustCheck = false;
+    bool fParallel = true;
+    bool fScriptChecks = true;
+    bool fSuccess = true;
 
-    // Get the script flags for this block
-    uint32_t flags = GetBlockScriptFlags(pindex, chainparams.GetConsensus());
-    bool fStrictPayToScriptHash = flags & SCRIPT_VERIFY_P2SH;
+    // Return values
+    std::shared_ptr<CBlockUndo> pBlockUndo;
+    std::shared_ptr<ValidationResourceTracker> pResourceTracker;
+    std::shared_ptr<CValidationState> pState;
 
-    ValidationResourceTracker resourceTracker;
-    std::vector<int> prevheights;
-    int nInputs = 0;
-    unsigned int nSigOps = 0;
-    CDiskTxPos pos(pindex->GetBlockPos(), GetSizeOfCompactSize(block.vtx.size()));
-    blockundo.vtxundo.reserve(block.vtx.size() - 1);
-    int nChecked = 0;
+    // These are set here and used locally but need
+    // to be returned to the main thread to be summed.
+    int nFees = 0;
     int nUnVerifiedChecked = 0;
+    int nChecked = 0;
+    unsigned int nInputs = 0;
+};
+
+static void RunValidation(std::shared_ptr<CRunValidationThread> pData)
+{
+    unsigned int nSigOps = 0;
+
+    std::shared_ptr<CCoinsViewCache> pView = pData->pView;
+    CBlockIndex *pindex = pData->pindex;
+    uint32_t flags = pData->flags;
+    int nLockTimeFlags = pData->nLockTimeFlags;
+    bool fJustCheck = pData->fJustCheck;
+    bool fParallel = pData->fParallel;
+    bool fScriptChecks = pData->fScriptChecks;
+
+    // Get the starting chainwork which is needed later to determine
+    // if some other validation thread has already updated the tip.
     const arith_uint256 nStartingChainWork = chainActive.Tip()->nChainWork;
 
-    // Section for boost scoped lock on the scriptcheck_mutex
-    boost::thread::id this_id(boost::this_thread::get_id());
-
-    // Get the next available mutex and the associated scriptcheckqueue. Then lock this thread
-    // with the mutex so that the checking of inputs can be done with the chosen scriptcheckqueue.
-    CCheckQueue<CScriptCheck> *pScriptQueue(PV->GetScriptCheckQueue());
-
-    // Aquire the control that is used to wait for the script threads to finish. Do this after aquiring the
-    // scoped lock to ensure the scriptqueue is free and available.
-    CCheckQueueControl<CScriptCheck> control(fScriptChecks && PV->ThreadCount() ? pScriptQueue : nullptr);
-
-    // Initialize a PV session.
-    if (!PV->Initialize(this_id, pindex, fParallel))
-        return false;
-
-    /*********************************************************************************************
-     If in PV, unlock cs_main here so we have no contention when we're checking inputs and scripts
-     *********************************************************************************************/
-    if (fParallel)
-        LEAVE_CRITICAL_SECTION(cs_main);
-
-    // Begin Section for Boost Scope Guard
+    std::vector<int> prevheights;
+    bool fStrictPayToScriptHash = flags & SCRIPT_VERIFY_P2SH;
+    for (unsigned int i = pData->nBeginIndex; i <= pData->nEndIndex; i++)
     {
-        // Scope guard to make sure cs_main is set and resources released if we encounter an exception.
-        BOOST_SCOPE_EXIT(&fParallel, &control, &pScriptQueue)
+        const CTransaction &tx = *pData->block->vtx[i];
+        const CTransactionRef &txref = pData->block->vtx[i];
+
+        pData->nInputs += tx.vin.size();
+        nSigOps += GetLegacySigOpCount(txref, flags);
+        // if (nSigOps > MAX_BLOCK_SIGOPS)
+        //     return state.DOS(100, error("ConnectBlock(): too many sigops"),
+        //                     REJECT_INVALID, "bad-blk-sigops");
+
+        if (!tx.IsCoinBase())
         {
-            ConnectBlockScopeExit(fParallel, control, pScriptQueue);
-        }
-        BOOST_SCOPE_EXIT_END
-
-
-        // Start checking Inputs
-        // When in parallel mode then unlock cs_main for this loop to give any other threads
-        // a chance to process in parallel. This is crucial for parallel validation to work.
-        // NOTE: the only place where cs_main is needed is if we hit PV->ChainWorkHasChanged, which
-        //       internally grabs the cs_main lock when needed.
-        for (unsigned int i = 0; i < block.vtx.size(); i++)
-        {
-            const CTransaction &tx = *(block.vtx[i]);
-            const CTransactionRef &txref = block.vtx[i];
-
-            nInputs += tx.vin.size();
-            nSigOps += GetLegacySigOpCount(txref, flags);
-            // if (nSigOps > MAX_BLOCK_SIGOPS)
-            //    return state.DoS(100, error("ConnectBlock(): too many sigops"),
-            //                    REJECT_INVALID, "bad-blk-sigops");
-
-            if (!tx.IsCoinBase())
+            if (!pData->pView->HaveInputs(tx))
             {
-                if (!view.HaveInputs(tx))
+                pData->fSuccess = false;
+
+                // If we were validating at the same time as another block and the other block wins the validation
+                // race and updates the UTXO first, then we may end up here with missing inputs.  Therefore we checked
+                // to see if the chainwork has advanced or if we recieved a quit and if so return without DOSing the
+                // node.
+                if (PV->ChainWorkHasChanged(nStartingChainWork) || PV->QuitReceived(pData->main_thread_id, fParallel))
                 {
-                    // If we were validating at the same time as another block and the other block wins the validation
-                    // race
-                    // and updates the UTXO first, then we may end up here with missing inputs.  Therefore we checke to
-                    // see
-                    // if the chainwork has advanced or if we recieved a quit and if so return without DOSing the node.
-                    if (PV->ChainWorkHasChanged(nStartingChainWork) || PV->QuitReceived(this_id, fParallel))
-                    {
-                        return false;
-                    }
-                    return state.DoS(100, error("%s: block %s inputs missing/spent in tx %d %s", __func__,
-                                              block.GetHash().ToString(), i, tx.GetHash().ToString()),
+                   return;
+                }
+                else
+                {
+
+                    pData->pState->DoS(100, error("%s: block %s inputs missing/spent in tx %d %s", __func__,
+                                                pData->block->GetHash().ToString(), i, tx.GetHash().ToString()),
                         REJECT_INVALID, "bad-txns-inputs-missingorspent");
-                }
-
-                // Check that transaction is BIP68 final
-                // BIP68 lock checks (as opposed to nLockTime checks) must
-                // be in ConnectBlock because they require the UTXO set
-                prevheights.resize(tx.vin.size());
-                {
-                    for (size_t j = 0; j < tx.vin.size(); j++)
-                    {
-                        prevheights[j] = CoinAccessor(view, tx.vin[j].prevout)->nHeight;
-                    }
-                }
-
-                if (!SequenceLocks(txref, nLockTimeFlags, &prevheights, *pindex))
-                {
-                    return state.DoS(100, error("%s: block %s contains a non-BIP68-final transaction", __func__,
-                                              block.GetHash().ToString()),
-                        REJECT_INVALID, "bad-txns-nonfinal");
-                }
-
-                if (fStrictPayToScriptHash)
-                {
-                    // Add in sigops done by pay-to-script-hash inputs;
-                    // this is to prevent a "rogue miner" from creating
-                    // an incredibly-expensive-to-validate block.
-                    nSigOps += GetP2SHSigOpCount(txref, view, flags);
-                }
-
-                nFees += view.GetValueIn(tx) - tx.GetValueOut();
-
-                uint256 hash = tx.GetHash();
-                {
-                    // If XVal is not on then check all inputs, otherwise only check
-                    // transactions that were not previously verified in the mempool.
-                    bool fUnVerified = block.setUnVerifiedTxns.count(hash);
-                    if (fUnVerified || !block.fXVal)
-                    {
-                        if (fUnVerified)
-                            nUnVerifiedChecked++;
-
-                        std::vector<CScriptCheck> vChecks;
-                        bool fCacheResults = fJustCheck; /* Don't cache results if we're actually connecting blocks
-                                                            (still consult the cache, though) */
-                        if (!CheckInputs(txref, state, view, fScriptChecks, flags, maxScriptOps.Value(), fCacheResults,
-                                &resourceTracker, PV->ThreadCount() ? &vChecks : nullptr))
-                        {
-                            return error("%s: block %s CheckInputs on %s failed with %s", __func__,
-                                block.GetHash().ToString(), tx.GetHash().ToString(), FormatStateMessage(state));
-                        }
-                        control.Add(vChecks);
-                        nChecked++;
-                    }
+                    PV->Quit(pData->main_thread_id);
+                    return;
                 }
             }
 
-            CTxUndo undoDummy;
-            if (i > 0)
+            // Check that transaction is BIP68 final
+            // BIP68 lock checks (as opposed to nLockTime checks) must
+            // be in ConnectBlock because they require the UTXO set
+            prevheights.resize(tx.vin.size());
             {
-                blockundo.vtxundo.push_back(CTxUndo());
+                for (size_t j = 0; j < tx.vin.size(); j++)
+                {
+                    prevheights[j] = CoinAccessor(*pView, tx.vin[j].prevout)->nHeight;
+                }
             }
-            UpdateCoins(tx, state, view, i == 0 ? undoDummy : blockundo.vtxundo.back(), pindex->nHeight);
-            vPos.push_back(std::make_pair(tx.GetHash(), pos));
-            pos.nTxOffset += ::GetSerializeSize(tx, SER_DISK, CLIENT_VERSION);
 
-            if (PV->QuitReceived(this_id, fParallel))
+            if (!SequenceLocks(txref, nLockTimeFlags, &prevheights, *pindex))
             {
-                return false;
+                pData->pState->DoS(100, error("%s: block %s contains a non-BIP68-final transaction", __func__,
+                                            pData->block->GetHash().ToString()),
+                    REJECT_INVALID, "bad-txns-nonfinal");
+                pData->fSuccess = false;
+                PV->Quit(pData->main_thread_id);
+                return;
             }
 
-            // This is for testing PV and slowing down the validation of inputs. This makes it easier to create
-            // and run python regression tests and is an testing feature.
-            if (GetArg("-pvtest", false))
-                MilliSleep(1000);
+            if (fStrictPayToScriptHash)
+            {
+                // Add in sigops done by pay-to-script-hash inputs;
+                // this is to prevent a "rogue miner" from creating
+                // an incredibly-expensive-to-validate block.
+                nSigOps += GetP2SHSigOpCount(txref, *pView, flags);
+            }
+
+            pData->nFees += pView->GetValueIn(tx) - tx.GetValueOut();
+
+            // If XVal is not on then check all inputs, otherwise only check
+            // transactions that were not previously verified in the mempool.
+            const uint256 &hash = tx.GetHash();
+            bool fUnVerified = pData->block->setUnVerifiedTxns.count(hash);
+            if (fUnVerified || !pData->block->fXVal)
+            {
+                if (fUnVerified)
+                    pData->nUnVerifiedChecked++;
+
+                std::vector<CScriptCheck> vChecks;
+                bool fCacheResults = fJustCheck; /* Don't cache results if we're actually connecting blocks
+                                                       (still consult the cache, though) */
+                if (!CheckInputs(txref, *pData->pState, *pView, fScriptChecks, flags, maxScriptOps.Value(),
+                        fCacheResults, &(*pData->pResourceTracker), PV->ThreadCount() ? &vChecks : nullptr))
+                {
+                    error("%s: block %s CheckInputs on %s failed with %s", __func__, pData->block->GetHash().ToString(),
+                        hash.ToString(), FormatStateMessage(*pData->pState));
+                    pData->fSuccess = false;
+                    PV->Quit(pData->main_thread_id);
+                    return;
+                }
+                pData->control->Add(vChecks);
+                pData->nChecked++;
+            }
         }
-        LOG(THIN, "Number of CheckInputs() performed: %d  Unverified count: %d\n", nChecked, nUnVerifiedChecked);
 
-
-        // Wait for all sig check threads to finish before updating utxo
-        LOG(PARALLEL, "Waiting for script threads to finish\n");
-        if (!control.Wait())
+        CTxUndo undoDummy;
+        if (i > 0)
         {
-            // if we end up here then the signature verification failed and we must re-lock cs_main before returning.
-            return state.DoS(100, false, REJECT_INVALID, "bad-blk-signatures", false, "parallel script check failed");
+            pData->pBlockUndo->vtxundo.push_back(CTxUndo());
         }
 
-        if (PV->QuitReceived(this_id, fParallel))
+        SpendCoins(tx, *pData->pState, *pView, i == 0 ? undoDummy : pData->pBlockUndo->vtxundo.back(), pindex->nHeight);
+
+        if (PV->QuitReceived(pData->main_thread_id, fParallel))
         {
-            return false;
+            pData->fSuccess = false;
+            return;
         }
-    }
 
-    int64_t nTime3 = GetStopwatchMicros();
-    nTimeConnect += nTime3 - nTime2;
-    LOG(BENCH, "      - Connect %u transactions: %.2fms (%.3fms/tx, %.3fms/txin) [%.2fs]\n", (unsigned)block.vtx.size(),
-        0.001 * (nTime3 - nTime2), 0.001 * (nTime3 - nTime2) / block.vtx.size(),
-        nInputs <= 1 ? 0 : 0.001 * (nTime3 - nTime2) / (nInputs - 1), nTimeConnect * 0.000001);
+        // This is for testing PV and slowing down the validation of inputs. This makes
+        // it easier to create and run python regression tests and is an testing feature.
+        if (GetArg("-pvtest", false))
+            MilliSleep(1000);
+   }
 
-    int64_t nTime4 = GetStopwatchMicros();
-    nTimeVerify += nTime4 - nTime2;
-    LOG(BENCH, "    - Verify %u txins: %.2fms (%.3fms/txin) [%.2fs]\n", nInputs - 1, 0.001 * (nTime4 - nTime2),
-        nInputs <= 1 ? 0 : 0.001 * (nTime4 - nTime2) / (nInputs - 1), nTimeVerify * 0.000001);
-
-    return true;
+   pData->pView->Flush();
 }
-
 
 bool ConnectBlockCanonicalOrdering(const CBlock &block,
     CValidationState &state,
@@ -2340,8 +2333,7 @@ bool ConnectBlockCanonicalOrdering(const CBlock &block,
     bool fParallel,
     bool fScriptChecks,
     CAmount &nFees,
-    CBlockUndo &blockundo,
-    std::vector<std::pair<uint256, CDiskTxPos> > &vPos)
+    CBlockUndo &blockundo)
 {
     nFees = 0;
     int64_t nTime2 = GetStopwatchMicros();
@@ -2356,17 +2348,16 @@ bool ConnectBlockCanonicalOrdering(const CBlock &block,
 
     // Get the script flags for this block
     uint32_t flags = GetBlockScriptFlags(pindex, chainparams.GetConsensus());
-    bool fStrictPayToScriptHash = flags & SCRIPT_VERIFY_P2SH;
 
-    ValidationResourceTracker resourceTracker;
+    ValidationResourceTracker *resourceTracker = new ValidationResourceTracker();
+    std::shared_ptr<ValidationResourceTracker> pResourceTracker(resourceTracker);
+
     std::vector<int> prevheights;
     int nInputs = 0;
-    unsigned int nSigOps = 0;
     CDiskTxPos pos(pindex->GetBlockPos(), GetSizeOfCompactSize(block.vtx.size()));
     blockundo.vtxundo.reserve(block.vtx.size() - 1);
     int nChecked = 0;
     int nUnVerifiedChecked = 0;
-    const arith_uint256 nStartingChainWork = chainActive.Tip()->nChainWork;
 
     // Section for boost scoped lock on the scriptcheck_mutex
     boost::thread::id this_id(boost::this_thread::get_id());
@@ -2400,7 +2391,8 @@ bool ConnectBlockCanonicalOrdering(const CBlock &block,
 
         // Outputs then Inputs algorithm: add outputs to the coin cache
         // and validate lexical ordering
-        uint256 prevTxHash;
+        uint64_t nStartTime = GetStopwatchMicros();
+        static std::atomic<int64_t> checkcoins{0};
         for (unsigned int i = 0; i < block.vtx.size(); i++)
         {
             const CTransaction &tx = *(block.vtx[i]);
@@ -2414,132 +2406,101 @@ bool ConnectBlockCanonicalOrdering(const CBlock &block,
                     error("%s: block %s repeated-tx %s", __func__, block.GetHash().ToString(), tx.GetHash().ToString()),
                     REJECT_INVALID, "repeated-txn");
             }
-
-            if (i == 1)
-            {
-                prevTxHash = tx.GetHash();
-            }
-            else if (i != 0)
-            {
-                uint256 curTxHash = tx.GetHash();
-                if (curTxHash < prevTxHash)
-                {
-                    return state.DoS(100,
-                        error("%s: block %s lexical misordering tx %d (%s < %s)", __func__, block.GetHash().ToString(),
-                                         i, curTxHash.ToString(), prevTxHash.ToString()),
-                        REJECT_INVALID, "bad-txn-order");
-                }
-                prevTxHash = curTxHash;
-            }
         }
+        checkcoins += GetStopwatchMicros() - nStartTime;
+        LOGA("total checkcoins is %5.6f\n", (double)checkcoins.load() / 1000000);
 
         // Start checking Inputs
         // When in parallel mode then unlock cs_main for this loop to give any other threads
         // a chance to process in parallel. This is crucial for parallel validation to work.
         // NOTE: the only place where cs_main is needed is if we hit PV->ChainWorkHasChanged, which
         //       internally grabs the cs_main lock when needed.
-        for (unsigned int i = 0; i < block.vtx.size(); i++)
+
+        // Calculate the number of validation thread to run
+        unsigned int numThreads = 4;
+        if (block.vtx.size() < numThreads)
+            numThreads = block.vtx.size();
+
+        nStartTime = GetStopwatchMicros();
+        static std::atomic<int64_t> runthreads{0};
+        // Initialize and launch threads
+        uint32_t nBeginIndex = 0;
+        boost::thread_group validation_threads;
+        std::vector<std::shared_ptr<CRunValidationThread> > vThreadData;
+        for (unsigned int i = 1; i <= numThreads; i++)
         {
-            const CTransaction &tx = *(block.vtx[i]);
-            const CTransactionRef &txref = block.vtx[i];
+            // Initialize the view
+            CCoinsViewCache *viewThread = new CCoinsViewCache(&view);
+            std::shared_ptr<CCoinsViewCache> pViewThread(viewThread);
+            pViewThread->SetBestBlock(view.GetBestBlock());
 
-            nInputs += tx.vin.size();
-            nSigOps += GetLegacySigOpCount(txref, flags);
+            // Initialize the shared data object
+            CRunValidationThread *data = new CRunValidationThread();
+            std::shared_ptr<CRunValidationThread> pData(data);
+            pData->pView = pViewThread;
+            pData->flags = flags;
+            pData->nLockTimeFlags = nLockTimeFlags;
+            pData->pindex = pindex;
+            pData->block = &block;
+            pData->fJustCheck = fJustCheck;
+            pData->fParallel = fParallel;
+            pData->fScriptChecks = fScriptChecks;
+            pData->control = &control;
+            pData->pResourceTracker = pResourceTracker;
+            pData->main_thread_id = this_id;
 
-            if (!tx.IsCoinBase())
-            {
-                if (!view.HaveInputs(tx))
-                {
-                    // If we were validating at the same time as another block and the other block wins the validation
-                    // race
-                    // and updates the UTXO first, then we may end up here with missing inputs.  Therefore we checke to
-                    // see
-                    // if the chainwork has advanced or if we recieved a quit and if so return without DOSing the node.
-                    if (PV->ChainWorkHasChanged(nStartingChainWork) || PV->QuitReceived(this_id, fParallel))
-                    {
-                        return false;
-                    }
-                    return state.DoS(100, error("%s: block %s inputs missing/spent in tx %d %s", __func__,
-                                              block.GetHash().ToString(), i, tx.GetHash().ToString()),
-                        REJECT_INVALID, "bad-txns-inputs-missingorspent");
-                }
+            // Create a separate state to track for each thread
+            CValidationState *threadState = new CValidationState();
+            std::shared_ptr<CValidationState> pState(threadState);
+            pData->pState = pState;
 
-                // Check that transaction is BIP68 final
-                // BIP68 lock checks (as opposed to nLockTime checks) must
-                // be in ConnectBlock because they require the UTXO set
-                prevheights.resize(tx.vin.size());
-                {
-                    for (size_t j = 0; j < tx.vin.size(); j++)
-                    {
-                        prevheights[j] = CoinAccessor(view, tx.vin[j].prevout)->nHeight;
-                    }
-                }
+            // Create a separate blockundo to track for each thread
+            CBlockUndo *thread_blockundo = new CBlockUndo();
+            std::shared_ptr<CBlockUndo> pBlockUndo(thread_blockundo);
+            pData->pBlockUndo = pBlockUndo;
 
-                if (!SequenceLocks(txref, nLockTimeFlags, &prevheights, *pindex))
-                {
-                    return state.DoS(100, error("%s: block %s contains a non-BIP68-final transaction", __func__,
-                                              block.GetHash().ToString()),
-                        REJECT_INVALID, "bad-txns-nonfinal");
-                }
+            // Calculate the indices used for which part of the block this
+            // thread will process
+            uint32_t nRange = block.vtx.size() / numThreads;
+            uint32_t nEndIndex = i * nRange;
+            if (i == numThreads)
+                nEndIndex = block.vtx.size() - 1;
+            pData->nBeginIndex = nBeginIndex;
+            pData->nEndIndex = nEndIndex;
+            nBeginIndex = nEndIndex + 1;
 
-                if (fStrictPayToScriptHash)
-                {
-                    // Add in sigops done by pay-to-script-hash inputs;
-                    // this is to prevent a "rogue miner" from creating
-                    // an incredibly-expensive-to-validate block.
-                    nSigOps += GetP2SHSigOpCount(txref, view, flags);
-                }
-
-                nFees += view.GetValueIn(tx) - tx.GetValueOut();
-
-                uint256 hash = tx.GetHash();
-                {
-                    // If XVal is not on then check all inputs, otherwise only check
-                    // transactions that were not previously verified in the mempool.
-                    bool fUnVerified = block.setUnVerifiedTxns.count(hash);
-                    if (fUnVerified || !block.fXVal)
-                    {
-                        if (fUnVerified)
-                            nUnVerifiedChecked++;
-
-                        std::vector<CScriptCheck> vChecks;
-                        bool fCacheResults = fJustCheck; /* Don't cache results if we're actually connecting blocks
-                                                            (still consult the cache, though) */
-                        if (!CheckInputs(txref, state, view, fScriptChecks, flags, maxScriptOps.Value(), fCacheResults,
-                                &resourceTracker, PV->ThreadCount() ? &vChecks : nullptr))
-                        {
-                            return error("%s: block %s CheckInputs on %s failed with %s", __func__,
-                                block.GetHash().ToString(), tx.GetHash().ToString(), FormatStateMessage(state));
-                        }
-                        control.Add(vChecks);
-                        nChecked++;
-                    }
-                }
-            }
-
-            CTxUndo undoDummy;
-            if (i > 0)
-            {
-                blockundo.vtxundo.push_back(CTxUndo());
-            }
-
-            SpendCoins(tx, state, view, i == 0 ? undoDummy : blockundo.vtxundo.back(), pindex->nHeight);
-
-            vPos.push_back(std::make_pair(tx.GetHash(), pos));
-            pos.nTxOffset += ::GetSerializeSize(tx, SER_DISK, CLIENT_VERSION);
-
-            if (PV->QuitReceived(this_id, fParallel))
-            {
-                return false;
-            }
-
-            // This is for testing PV and slowing down the validation of inputs. This makes it easier to create
-            // and run python regression tests and is an testing feature.
-            if (GetArg("-pvtest", false))
-                MilliSleep(1000);
+            // Launch thread
+            vThreadData.push_back(pData);
+            validation_threads.create_thread(boost::bind(&RunValidation, pData));
         }
-        LOG(THIN, "Number of CheckInputs() performed: %d  Unverified count: %d\n", nChecked, nUnVerifiedChecked);
+        validation_threads.join_all();
+        runthreads += GetStopwatchMicros() - nStartTime;
+        LOGA("total runthreads is %5.6f\n", (double)runthreads.load() / 1000000);
 
+        nStartTime = GetStopwatchMicros();
+        static std::atomic<int64_t> flushthreads{0};
+        // Check data returned from each thread
+        for (auto &it : vThreadData)
+        {
+            if (it->pState->Invalid())
+            {
+                state = *it->pState;
+                return it->fSuccess;
+            }
+            else if (!it->fSuccess)
+                return it->fSuccess;
+
+            nFees += it->nFees;
+            nChecked += it->nChecked;
+            nUnVerifiedChecked += it->nUnVerifiedChecked;
+            nInputs += it->nInputs;
+
+            blockundo.vtxundo.insert(blockundo.vtxundo.end(), it->pBlockUndo->vtxundo.begin(), it->pBlockUndo->vtxundo.end());
+        }
+        flushthreads += GetStopwatchMicros() - nStartTime;
+        LOGA("total flushthreads is %5.6f\n", (double)flushthreads.load() / 1000000);
+
+        LOG(BLK | PARALLEL, "Number of CheckInputs() performed: %d  Unverified count: %d\n", nChecked, nUnVerifiedChecked);
 
         // Wait for all sig check threads to finish before updating utxo
         LOG(PARALLEL, "Waiting for script threads to finish\n");
@@ -2623,45 +2584,17 @@ bool ConnectBlock(const CBlock &block,
 
     CAmount nFees = 0;
     CBlockUndo blockundo;
-    std::vector<std::pair<uint256, CDiskTxPos> > vPos;
-    vPos.reserve(block.vtx.size());
+    if (!ConnectBlockCanonicalOrdering(
+            block, state, pindex, view, chainparams, fJustCheck, fParallel, fScriptChecks, nFees, blockundo))
+        return false;
 
-    // Discover how to handle this block
-    bool canonical = fCanonicalTxsOrder;
-    // Always allow overwite of fCanonicalTxsOrder but for regtest on BCH
-    if (IsNov2018Activated(chainparams.GetConsensus(), chainActive.Tip()))
-    {
-        if (!(chainparams.NetworkIDString() == "regtest"))
-        {
-            canonical = true;
-        }
-    }
-    else
-    {
-        if (!(chainparams.NetworkIDString() == "regtest"))
-        {
-            canonical = false;
-        }
-    }
-
-    if (canonical)
-    {
-        if (!ConnectBlockCanonicalOrdering(
-                block, state, pindex, view, chainparams, fJustCheck, fParallel, fScriptChecks, nFees, blockundo, vPos))
-            return false;
-    }
-    else
-    {
-        if (!ConnectBlockDependencyOrdering(
-                block, state, pindex, view, chainparams, fJustCheck, fParallel, fScriptChecks, nFees, blockundo, vPos))
-            return false;
-    }
-
+/*
     CAmount blockReward = nFees + GetBlockSubsidy(pindex->nHeight, chainparams.GetConsensus());
     if (block.vtx[0]->GetValueOut() > blockReward)
         return state.DoS(100, error("ConnectBlock(): coinbase pays too much (actual=%d vs limit=%d)",
                                   block.vtx[0]->GetValueOut(), blockReward),
             REJECT_INVALID, "bad-cb-amount");
+*/
 
     if (fJustCheck)
         return true;
@@ -3128,10 +3061,14 @@ bool ConnectTip(CValidationState &state,
             return false;
         }
         int64_t nStart = GetStopwatchMicros();
+        static int64_t nTotalUpdateCoins = 0;
         bool result = view.Flush();
         nBlockSizeAtChainTip.store(pblock->GetBlockSize());
         assert(result);
+        nTotalUpdateCoins += GetStopwatchMicros() - nStart;
         LOG(BENCH, "      - Update Coins %.3fms\n", GetStopwatchMicros() - nStart);
+        LOG(BENCH, "      - Total Update Coins %.3fms\n", nTotalUpdateCoins);
+
 
         mapBlockSource.erase(pindexNew->GetBlockHash());
         nTime3 = GetStopwatchMicros();

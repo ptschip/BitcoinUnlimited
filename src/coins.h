@@ -209,6 +209,7 @@ public:
         const uint64_t nBestCoinHeight,
         size_t &nChildCachedCoinsUsage) override;
     CCoinsViewCursor *Cursor() const override;
+    CCoinsView *GetBase() { return base; }
     size_t EstimateSize() const override;
 };
 
