@@ -188,6 +188,7 @@ public:
     void Erase(const boost::thread::id this_id);
 
     /** Quit a block validation thread and associated script validation threads */
+    void Quit(boost::thread::id this_id);
     void Quit(std::map<boost::thread::id, CHandleBlockMsgThreads>::iterator iter);
 
     /** Post the semaphore when the thread exits.  */

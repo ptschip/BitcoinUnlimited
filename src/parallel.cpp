@@ -325,6 +325,16 @@ void CParallelValidation::Erase(const boost::thread::id this_id)
         mapBlockValidationThreads.erase(this_id);
 }
 
+void CParallelValidation::Quit(boost::thread::id this_id)
+{
+    LOCK(cs_blockvalidationthread);
+    auto iter = mapBlockValidationThreads.find(this_id);
+    if (iter != mapBlockValidationThreads.end())
+    {
+        Quit(iter);
+    }
+}
+
 void CParallelValidation::Quit(std::map<boost::thread::id, CHandleBlockMsgThreads>::iterator iter)
 {
     AssertLockHeld(cs_blockvalidationthread);
