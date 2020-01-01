@@ -5,6 +5,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include "validation.h"
+#include "validationqueue.h"
 
 #include "blockrelay/blockrelay_common.h"
 #include "blockstorage/blockstorage.h"
@@ -2015,7 +2016,6 @@ DisconnectResult DisconnectBlock(const CBlock &block, const CBlockIndex *pindex,
 
     return fClean ? DISCONNECT_OK : DISCONNECT_UNCLEAN;
 }
-
 
 bool ConnectBlockPrevalidations(const CBlock &block,
     CValidationState &state,
