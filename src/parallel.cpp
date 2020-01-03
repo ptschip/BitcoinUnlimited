@@ -29,20 +29,12 @@
 using namespace std;
 
 // see at doc/bu-parallel-validation.md to get the details
-static const unsigned int nScriptCheckQueues = 4;
+static const unsigned int DEFAULT_NUM_QUEUES = 4;
 
 std::unique_ptr<CParallelValidation> PV;
 
 bool ShutdownRequested();
 static void HandleBlockMessageThread(CNode *pfrom, const string strCommand, CBlockRef pblock, const CInv inv);
-
-static void AddScriptCheckThreads(int i, CCheckQueue<CScriptCheck> *pqueue)
-{
-    ostringstream tName;
-    tName << "scriptchk" << i;
-    RenameThread(tName.str().c_str());
-    pqueue->Thread();
-}
 
 bool CScriptCheck::operator()()
 {
@@ -55,9 +47,31 @@ bool CScriptCheck::operator()()
     return true;
 }
 
-CParallelValidation::CParallelValidation() : nThreads(0), semThreadCount(nScriptCheckQueues)
+bool CRunValidation::operator()()
 {
-    // There are nScriptCheckQueues which are used to validate blocks in parallel. Each block
+
+    return true;
+}
+
+static void AddScriptCheckThreads(int i, CCheckQueue<CScriptCheck> *pqueue)
+{
+    ostringstream tName;
+    tName << "scriptchk" << i;
+    RenameThread(tName.str().c_str());
+    pqueue->Thread();
+}
+
+static void AddSpendCoinThreads(int i, CValidationQueue<CRunValidation> *pqueue)
+{
+    ostringstream tName;
+    tName << "spendcoin" << i;
+    RenameThread(tName.str().c_str());
+    pqueue->Thread();
+}
+
+CParallelValidation::CParallelValidation() : nThreads(0), semThreadCount(DEFAULT_NUM_QUEUES)
+{
+    // There are DEFAULT_NUM_QUEUES which are used to validate blocks in parallel. Each block
     // that validates will use one script check queue which must *not* be shared with any other
     // validating block. Furthermore, each script check queue has a number of threads which it
     // controls and which do the actual validating of scripts.
@@ -76,31 +90,47 @@ CParallelValidation::CParallelValidation() : nThreads(0), semThreadCount(nScript
         nThreads = MAX_SCRIPTCHECK_THREADS;
 
     // Create each script check queue with all associated threads.
-    LOGA("Launching %d ScriptQueues each using %d threads for script verification\n", nScriptCheckQueues, nThreads);
-    while (QueueCount() < nScriptCheckQueues)
+    LOGA("Launching %d ScriptCheckQueues each having %d threads for script verification\n", DEFAULT_NUM_QUEUES, nThreads);
+    LOGA("Launching %d SpendCoinQueues each having %d threads for block validation\n", DEFAULT_NUM_QUEUES, nThreads);
+    while (QueueCount() < DEFAULT_NUM_QUEUES)
     {
+        // Create the script check threads
         auto queue = new CCheckQueue<CScriptCheck>(128);
         for (unsigned int i = 0; i < nThreads; i++)
         {
-            threadGroup.create_thread(boost::bind(&AddScriptCheckThreads, i + 1, queue));
+            threadGroup_ScriptCheck.create_thread(boost::bind(&AddScriptCheckThreads, i + 1, queue));
         }
-        vQueues.push_back(queue);
+        vScriptQueues.push_back(queue);
+
+        // create the spend coin threads
+        auto validationQueue = new CValidationQueue<CRunValidation>(128);
+        for (unsigned int i = 0; i < nThreads; i++)
+        {
+            threadGroup_SpendCoin.create_thread(boost::bind(&AddSpendCoinThreads, i + 1, validationQueue));
+        }
+        vSpendCoinQueues.push_back(validationQueue);
     }
 }
 
 CParallelValidation::~CParallelValidation()
 {
-    for (auto queue : vQueues)
+    for (auto queue : vScriptQueues)
         queue->Shutdown();
-    threadGroup.join_all();
-    for (auto queue : vQueues)
+    threadGroup_ScriptCheck.join_all();
+    for (auto queue : vScriptQueues)
+        delete queue;
+
+    for (auto queue : vSpendCoinQueues)
+        queue->Shutdown();
+    threadGroup_SpendCoin.join_all();
+    for (auto queue : vSpendCoinQueues)
         delete queue;
 }
 
 unsigned int CParallelValidation::QueueCount()
 {
     // Only modified in constructor so no lock currently needed
-    return vQueues.size();
+    return vScriptQueues.size();
 }
 
 bool CParallelValidation::Initialize(const boost::thread::id this_id, const CBlockIndex *pindex, const bool fParallel)
@@ -495,7 +525,7 @@ void CParallelValidation::HandleBlockMessage(CNode *pfrom, const string &strComm
 
             {
                 LOCK(cs_blockvalidationthread);
-                if (mapBlockValidationThreads.size() >= nScriptCheckQueues)
+                if (mapBlockValidationThreads.size() >= DEFAULT_NUM_QUEUES)
                 {
                     uint64_t nLargestBlockSize = 0;
                     bool fCompeting = false;
@@ -681,17 +711,19 @@ void HandleBlockMessageThread(CNode *pfrom, const string strCommand, CBlockRef p
 }
 
 
-// for newly mined block validation, return the first queue not in use.
-CCheckQueue<CScriptCheck> *CParallelValidation::GetScriptCheckQueue()
+// for newly mined block validation, return the first script queue and spendcoin queue not in use. These
+// are paired.
+std::pair<CCheckQueue<CScriptCheck> *, CValidationQueue<CRunValidation> *> CParallelValidation::GetScriptCheckQueue()
 {
     while (true)
     {
         {
             LOCK(cs_blockvalidationthread);
 
-            for (unsigned int i = 0; i < vQueues.size(); i++)
+            for (unsigned int i = 0; i < vScriptQueues.size(); i++)
             {
-                auto pqueue(vQueues[i]);
+                auto pqueue(vScriptQueues[i]);
+                auto pSpendCoinQueue(vSpendCoinQueues[i]);
 
                 if (pqueue->IsIdle())
                 {
@@ -718,8 +750,8 @@ CCheckQueue<CScriptCheck> *CParallelValidation::GetScriptCheckQueue()
                         if (mapBlockValidationThreads.count(this_id))
                             mapBlockValidationThreads[this_id].pScriptQueue = pqueue;
 
-                        LOG(PARALLEL, "next scriptqueue not in use is %d\n", i);
-                        return pqueue;
+                        LOG(PARALLEL, "next scriptqueue and spendcoinqueue not in use is %d\n", i);
+                        return std::make_pair(pqueue, pSpendCoinQueue);
                     }
                 }
             }
