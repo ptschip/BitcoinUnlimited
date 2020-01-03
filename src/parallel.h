@@ -14,6 +14,7 @@
 #include "stat.h"
 #include "uint256.h"
 #include "util.h"
+#include "validation/validationqueue.h"
 #include <vector>
 
 #include <thread>
@@ -48,6 +49,19 @@ public:
         LOCK(cs_resource_tracker);
         return nSighashBytes;
     }
+};
+
+class CRunValidation
+{
+public:
+    CRunValidation() {}
+
+    bool operator()();
+
+    void swap(CRunValidation &check)
+    {
+    }
+
 };
 
 /**
@@ -117,12 +131,16 @@ private:
     /** txn hashes that are in the previous block */
     CCriticalSection cs_previousblock;
     std::vector<uint256> vPreviousBlock;
-    /** Vector of script check queues */
-    std::vector<CCheckQueue<CScriptCheck> *> vQueues;
-    /** Number of threads */
+    /** Vector of script check queues with each queue containing its own threadgroup */
+    std::vector<CCheckQueue<CScriptCheck> *> vScriptQueues;
+    /** Vector of spend coin queues with each queue containing its own threadgroup  */
+    std::vector<CValidationQueue<CRunValidation> *> vSpendCoinQueues;
+    /** Number of threads for each queue */
     unsigned int nThreads;
-    /** All threads currently running */
-    boost::thread_group threadGroup;
+    /** Threadgroup for script check threads*/
+    boost::thread_group threadGroup_ScriptCheck;
+    /** Threadgroup for spend coin threads */
+    boost::thread_group threadGroup_SpendCoin;
     /** The semaphore limits the number of parallel validation threads */
     CSemaphore semThreadCount;
 
@@ -223,8 +241,8 @@ public:
     /** The number of script check queues */
     unsigned int QueueCount();
 
-    /** For newly mined block validation, return the first queue not in use. */
-    CCheckQueue<CScriptCheck> *GetScriptCheckQueue();
+    /** For newly mined block validation, return the first scriptqueue and spendcoinqueue not in use. */
+    std::pair<CCheckQueue<CScriptCheck> *, CValidationQueue<CRunValidation> *> GetScriptCheckQueue();
 };
 
 extern std::unique_ptr<CParallelValidation> PV; // Singleton class

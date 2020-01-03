@@ -3,8 +3,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef BITCOIN_CHECKQUEUE_H
-#define BITCOIN_CHECKQUEUE_H
+#ifndef BITCOIN_VALIDATIONQUEUE_H
+#define BITCOIN_VALIDATIONQUEUE_H
 
 #include <algorithm>
 #include <atomic>
@@ -110,6 +110,7 @@ private:
                 {
                     if (fExit)
                         return fAllOk;
+// if todo is zero and not master then we need to create the blockundo files from each thread
                     if ((fMaster) && nTodo == 0)
                     {
                         nTotal--;
@@ -206,8 +207,8 @@ private:
     bool fDone;
 
 public:
-    CValidationQueueControl() {} // BU: parallel block validation
-    CValidationQueueControl(CCheckQueue<T> *pqueueIn) : pqueue(pqueueIn), fDone(false)
+    CValidationQueueControl() {}
+    CValidationQueueControl(CValidationQueue<T> *pqueueIn) : pqueue(pqueueIn), fDone(false)
     {
         // passed queue is supposed to be unused, or nullptr
         if (pqueue != nullptr)
@@ -253,4 +254,4 @@ public:
     }
 };
 
-#endif // BITCOIN_CHECKQUEUE_H
+#endif // BITCOIN_VALIDATIONQUEUE_H

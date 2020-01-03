@@ -2166,7 +2166,7 @@ struct CRunValidationThread
     std::shared_ptr<CCoinsViewCache> pView;
     CBlockIndex *pindex;
     const CBlock *block;
-    CCheckQueueControl<CScriptCheck> *control;
+    CCheckQueueControl<CScriptCheck> *control_scriptchecks;
     boost::thread::id main_thread_id;
     uint32_t flags = 0;
     int nLockTimeFlags = 0;
@@ -2296,7 +2296,7 @@ static void RunValidation(std::shared_ptr<CRunValidationThread> pData)
                     PV->Quit(pData->main_thread_id);
                     return;
                 }
-                pData->control->Add(vChecks);
+                pData->control_scriptchecks->Add(vChecks);
                 pData->nChecked++;
             }
         }
@@ -2364,11 +2364,18 @@ bool ConnectBlockCanonicalOrdering(const CBlock &block,
 
     // Get the next available mutex and the associated scriptcheckqueue. Then lock this thread
     // with the mutex so that the checking of inputs can be done with the chosen scriptcheckqueue.
-    CCheckQueue<CScriptCheck> *pScriptQueue(PV->GetScriptCheckQueue());
+    auto queues = PV->GetScriptCheckQueue();
+    CCheckQueue<CScriptCheck> *pScriptQueue = queues.first;
+    CValidationQueue<CRunValidation> * pValidationQueue = queues.second;
+    assert(pScriptQueue);
+    assert(pValidationQueue);
 
     // Aquire the control that is used to wait for the script threads to finish. Do this after aquiring the
     // scoped lock to ensure the scriptqueue is free and available.
-    CCheckQueueControl<CScriptCheck> control(fScriptChecks && PV->ThreadCount() ? pScriptQueue : nullptr);
+    CCheckQueueControl<CScriptCheck> control_scriptchecks(fScriptChecks && PV->ThreadCount() ? pScriptQueue : nullptr);
+
+    // Aquire the control used to wait for validation threads to finish. Must have a valid script queue.
+    CValidationQueueControl<CRunValidation> control_spendcoins(pValidationQueue);
 
     // Initialize a PV session.
     if (!PV->Initialize(this_id, pindex, fParallel))
@@ -2383,9 +2390,9 @@ bool ConnectBlockCanonicalOrdering(const CBlock &block,
     // Begin Section for Boost Scope Guard
     {
         // Scope guard to make sure cs_main is set and resources released if we encounter an exception.
-        BOOST_SCOPE_EXIT(&fParallel, &control, &pScriptQueue)
+        BOOST_SCOPE_EXIT(&fParallel, &control_scriptchecks, &pScriptQueue)
         {
-            ConnectBlockScopeExit(fParallel, control, pScriptQueue);
+            ConnectBlockScopeExit(fParallel, control_scriptchecks, pScriptQueue);
         }
         BOOST_SCOPE_EXIT_END
 
@@ -2445,7 +2452,7 @@ bool ConnectBlockCanonicalOrdering(const CBlock &block,
             pData->fJustCheck = fJustCheck;
             pData->fParallel = fParallel;
             pData->fScriptChecks = fScriptChecks;
-            pData->control = &control;
+            pData->control_scriptchecks = &control_scriptchecks;
             pData->pResourceTracker = pResourceTracker;
             pData->main_thread_id = this_id;
 
@@ -2474,6 +2481,8 @@ bool ConnectBlockCanonicalOrdering(const CBlock &block,
             validation_threads.create_thread(boost::bind(&RunValidation, pData));
         }
         validation_threads.join_all();
+        control_spendcoins.Wait();
+
         runthreads += GetStopwatchMicros() - nStartTime;
         LOGA("total runthreads is %5.6f\n", (double)runthreads.load() / 1000000);
 
@@ -2504,7 +2513,7 @@ bool ConnectBlockCanonicalOrdering(const CBlock &block,
 
         // Wait for all sig check threads to finish before updating utxo
         LOG(PARALLEL, "Waiting for script threads to finish\n");
-        if (!control.Wait())
+        if (!control_scriptchecks.Wait())
         {
             // if we end up here then the signature verification failed and we must re-lock cs_main before returning.
             return state.DoS(100, false, REJECT_INVALID, "bad-blk-signatures", false, "parallel script check failed");
