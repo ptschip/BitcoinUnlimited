@@ -134,7 +134,7 @@ private:
     /** Vector of script check queues with each queue containing its own threadgroup */
     std::vector<CCheckQueue<CScriptCheck> *> vScriptQueues;
     /** Vector of spend coin queues with each queue containing its own threadgroup  */
-    std::vector<CValidationQueue<CRunValidation> *> vSpendCoinQueues;
+    std::vector<std::vector<CValidationQueue *>> vSpendCoinQueues;
     /** Number of threads for each queue */
     unsigned int nThreads;
     /** Threadgroup for script check threads*/
@@ -242,7 +242,7 @@ public:
     unsigned int QueueCount();
 
     /** For newly mined block validation, return the first scriptqueue and spendcoinqueue not in use. */
-    std::pair<CCheckQueue<CScriptCheck> *, CValidationQueue<CRunValidation> *> GetScriptCheckQueue();
+    std::pair<CCheckQueue<CScriptCheck> *, std::vector<CValidationQueue *> > GetScriptCheckQueue();
 };
 
 extern std::unique_ptr<CParallelValidation> PV; // Singleton class

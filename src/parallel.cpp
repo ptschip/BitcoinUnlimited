@@ -61,7 +61,7 @@ static void AddScriptCheckThreads(int i, CCheckQueue<CScriptCheck> *pqueue)
     pqueue->Thread();
 }
 
-static void AddSpendCoinThreads(int i, CValidationQueue<CRunValidation> *pqueue)
+static void AddSpendCoinThreads(int i, CValidationQueue *pqueue)
 {
     ostringstream tName;
     tName << "spendcoin" << i;
@@ -103,28 +103,32 @@ CParallelValidation::CParallelValidation() : nThreads(0), semThreadCount(DEFAULT
         vScriptQueues.push_back(queue);
 
         // create the spend coin threads
-        auto validationQueue = new CValidationQueue<CRunValidation>(128);
+        std::vector<CValidationQueue *> vSpendCoinThreads GUARDED_BY(cs_blockvalidationthread);
         for (unsigned int i = 0; i < nThreads; i++)
         {
+            auto validationQueue = new CValidationQueue(128);
             threadGroup_SpendCoin.create_thread(boost::bind(&AddSpendCoinThreads, i + 1, validationQueue));
+            vSpendCoinThreads.push_back(validationQueue);
         }
-        vSpendCoinQueues.push_back(validationQueue);
+        vSpendCoinQueues.push_back(vSpendCoinThreads);
     }
 }
 
 CParallelValidation::~CParallelValidation()
 {
-    for (auto queue : vScriptQueues)
+    for (auto &queue : vScriptQueues)
         queue->Shutdown();
     threadGroup_ScriptCheck.join_all();
-    for (auto queue : vScriptQueues)
+    for (auto &queue : vScriptQueues)
         delete queue;
 
-    for (auto queue : vSpendCoinQueues)
-        queue->Shutdown();
+    for (auto &queue : vSpendCoinQueues)
+        for (auto &thread : queue)
+            thread->Shutdown();
     threadGroup_SpendCoin.join_all();
-    for (auto queue : vSpendCoinQueues)
-        delete queue;
+    for (auto &queue : vSpendCoinQueues)
+        for (auto &thread : queue)
+            delete thread;
 }
 
 unsigned int CParallelValidation::QueueCount()
@@ -713,7 +717,7 @@ void HandleBlockMessageThread(CNode *pfrom, const string strCommand, CBlockRef p
 
 // for newly mined block validation, return the first script queue and spendcoin queue not in use. These
 // are paired.
-std::pair<CCheckQueue<CScriptCheck> *, CValidationQueue<CRunValidation> *> CParallelValidation::GetScriptCheckQueue()
+std::pair<CCheckQueue<CScriptCheck> *, std::vector<CValidationQueue *> > CParallelValidation::GetScriptCheckQueue()
 {
     while (true)
     {
@@ -722,6 +726,7 @@ std::pair<CCheckQueue<CScriptCheck> *, CValidationQueue<CRunValidation> *> CPara
 
             for (unsigned int i = 0; i < vScriptQueues.size(); i++)
             {
+
                 auto pqueue(vScriptQueues[i]);
                 auto pSpendCoinQueue(vSpendCoinQueues[i]);
 
