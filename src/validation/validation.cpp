@@ -2425,10 +2425,10 @@ bool ConnectBlockCanonicalOrdering(const CBlock &block,
         //       internally grabs the cs_main lock when needed.
 
         // Aquire the control used to wait for validation threads to finish. Must have a valid script queue.
-   //     CValidationQueueControl<CRunValidation> control_spendcoins(pValidationQueue);
+        CValidationQueueControl control_spendcoins(vValidationQueue[0]);
 
         // Calculate the number of validation thread to run
-        unsigned int numThreads = 4;
+        unsigned int numThreads = 1;
         if (block.vtx.size() < numThreads)
             numThreads = block.vtx.size();
 
@@ -2438,7 +2438,7 @@ bool ConnectBlockCanonicalOrdering(const CBlock &block,
         uint32_t nBeginIndex = 0;
         boost::thread_group validation_threads;
         std::vector<std::shared_ptr<CRunValidationThread> > vThreadData;
-        for (unsigned int i = 1; i <= numThreads; i++)
+        for (unsigned int i = 0; i < numThreads; i++)
         {
             // Initialize the view
             CCoinsViewCache *viewThread = new CCoinsViewCache(&view);
@@ -2473,8 +2473,8 @@ bool ConnectBlockCanonicalOrdering(const CBlock &block,
             // Calculate the indices used for which part of the block this
             // thread will process
             uint32_t nRange = block.vtx.size() / numThreads;
-            uint32_t nEndIndex = i * nRange;
-            if (i == numThreads)
+            uint32_t nEndIndex = (i + 1) * nRange;
+            if ((i + 1) == numThreads)
                 nEndIndex = block.vtx.size() - 1;
             pData->nBeginIndex = nBeginIndex;
             pData->nEndIndex = nEndIndex;
