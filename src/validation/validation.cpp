@@ -2425,10 +2425,14 @@ bool ConnectBlockCanonicalOrdering(const CBlock &block,
         //       internally grabs the cs_main lock when needed.
 
         // Aquire the control used to wait for validation threads to finish. Must have a valid script queue.
-        CValidationQueueControl control_spendcoins(vValidationQueue[0]);
+        CValidationQueueControl control_spendcoins1(vValidationQueue[0]);
+        CValidationQueueControl control_spendcoins2(vValidationQueue[1]);
+        CValidationQueueControl control_spendcoins3(vValidationQueue[2]);
+        CValidationQueueControl control_spendcoins4(vValidationQueue[3]);
 
         // Calculate the number of validation thread to run
-        unsigned int numThreads = 1;
+        unsigned int numThreads = vValidationQueue.size();
+        //unsigned int numThreads = 1;
         if (block.vtx.size() < numThreads)
             numThreads = block.vtx.size();
 
@@ -2481,12 +2485,16 @@ bool ConnectBlockCanonicalOrdering(const CBlock &block,
             nBeginIndex = nEndIndex + 1;
 
             // Launch thread
- std::vector<int> vIndex;
+            std::vector<int> vIndex;
             vThreadData.push_back(pData);
-            validation_threads.create_thread(boost::bind(&RunValidation, pData, vIndex));
+            vValidationQueue[i]->SetValidationData(pData);
+           //  validation_threads.create_thread(boost::bind(&RunValidation, pData, vIndex));
         }
-        validation_threads.join_all();
-    //    control_spendcoins.Wait();
+      //  validation_threads.join_all();
+        control_spendcoins1.Wait();
+        control_spendcoins2.Wait();
+        control_spendcoins3.Wait();
+        control_spendcoins4.Wait();
 
         runthreads += GetStopwatchMicros() - nStartTime;
         LOGA("total runthreads is %5.6f\n", (double)runthreads.load() / 1000000);

@@ -126,7 +126,7 @@ private:
                         nTodo -= nNow;
                     if (nTodo == 0 && !fMaster)
                     {
-printf("notify master\n");
+//printf("notify master\n");
                         // We processed the last element; inform the master it can exit and return the result
                         queue.clear();
                         condMaster.notify_one();
@@ -178,7 +178,7 @@ printf("notify master\n");
                 nNow = std::max(1U, std::min(nBatchSize, (unsigned int)queue.size() / (nTotal + nIdle + 1)));
 nNow = 1;
                 vChecks.resize(nNow);
-printf("nNow is %d queue is %lu\n", nNow, queue.size());
+//printf("nNow is %d queue is %lu\n", nNow, queue.size());
                 for (unsigned int i = 0; i < nNow; i++)
                 {
                     // We want the lock on the mutex to be as short as possible, so swap jobs from the global
@@ -194,7 +194,7 @@ printf("nNow is %d queue is %lu\n", nNow, queue.size());
             // execute work
             if (fOk)
             {
-printf("running validation checks\n");
+//printf("running validation checks\n");
                 fOk = RunValidation(pData, vChecks);
 //fOk=true;
                 vChecks.clear();
@@ -251,10 +251,12 @@ public:
         for (size_t i = 0; i < pData->block->vtx.size(); i++)
         {
             queue.push_back(i);
+break;
         }
 
         nTodo += queue.size();
-printf("ntodo %d\n", nTodo);
+nTodo = 1;
+//printf("ntodo %d\n", nTodo);
         if (nTodo == 1)
             condWorker.notify_one();
         else if (nTodo > 1)
@@ -267,7 +269,7 @@ printf("ntodo %d\n", nTodo);
     bool IsIdle()
     {
         boost::unique_lock<boost::mutex> lock(mutex);
-printf("ntotal %d nidle %d ntodo %d fallok %d\n", nTotal, nIdle, nTodo, fAllOk);
+//printf("ntotal %d nidle %d ntodo %d fallok %d\n", nTotal, nIdle, nTodo, fAllOk);
         return (nTotal == nIdle && nTodo == 0 && fAllOk == true);
     }
 };
