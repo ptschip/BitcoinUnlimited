@@ -14,6 +14,7 @@
 #include "parallel.h"
 #include "txdebugger.h"
 #include "txmempool.h"
+#include "validation/validationqueue.h"
 #include "versionbits.h"
 
 extern std::atomic<uint64_t> nBlockSizeAtChainTip;

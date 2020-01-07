@@ -2,10 +2,10 @@
 // Copyright (c) 2015-2018 The Bitcoin Unlimited developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
-
 #ifndef BITCOIN_VALIDATIONQUEUE_H
 #define BITCOIN_VALIDATIONQUEUE_H
 
+#include "validation/validation.h"
 #include <algorithm>
 #include <atomic>
 #include <vector>
@@ -14,7 +14,40 @@
 #include <boost/thread/locks.hpp>
 #include <boost/thread/mutex.hpp>
 
-template <typename T>
+//void RunValidation(std::shared_ptr<CRunValidationThread> pData);
+struct CRunValidationThread
+{
+    // Initialized here on construction but will be modified
+    // and used locally only.
+    std::shared_ptr<CCoinsViewCache> pView;
+    CBlockIndex *pindex;
+    const CBlock *block;
+    CCheckQueueControl<CScriptCheck> *control_scriptchecks;
+    boost::thread::id main_thread_id;
+    uint32_t flags = 0;
+    int nLockTimeFlags = 0;
+    uint32_t nBeginIndex = 0;
+    uint32_t nEndIndex = 0;
+    bool fJustCheck = false;
+    bool fParallel = true;
+    bool fScriptChecks = true;
+    bool fSuccess = true;
+
+    // Return values
+    std::shared_ptr<CBlockUndo> pBlockUndo;
+    std::shared_ptr<ValidationResourceTracker> pResourceTracker;
+    std::shared_ptr<CValidationState> pState;
+
+    // These are set here and used locally but need
+    // to be returned to the main thread to be summed.
+    int nFees = 0;
+    int nUnVerifiedChecked = 0;
+    int nChecked = 0;
+    unsigned int nInputs = 0;
+};
+bool RunValidation(std::shared_ptr<CRunValidationThread> pData, std::vector<int> &vIndex);
+
+//template <typename T>
 class CValidationQueueControl;
 
 /**
@@ -27,7 +60,6 @@ class CValidationQueueControl;
   * the master is done adding work, it temporarily joins the worker pool
   * as an N'th worker, until all jobs are done.
   */
-template <typename T>
 class CValidationQueue
 {
 private:
@@ -42,7 +74,7 @@ private:
 
     //! The queue of elements to be processed.
     //! As the order of booleans doesn't matter, it is used as a LIFO (stack)
-    std::vector<T> queue;
+    std::vector<int> queue;
 
     //! The number of workers (including the master) that are idle.
     int nIdle;
@@ -69,11 +101,16 @@ private:
     //! The maximum number of elements to be processed in one batch
     unsigned int nBatchSize;
 
+    //! A shared point to data that is passed in and also used to return data to the main thread
+    std::shared_ptr<CRunValidationThread> pData;
+    uint32_t nBeginIndex;
+    uint32_t nEndIndex;
+
     /** Internal function that does bulk of the verification work. */
     bool Loop(bool fMaster = false)
     {
         boost::condition_variable &cond = fMaster ? condMaster : condWorker;
-        std::vector<T> vChecks;
+        std::vector<int> vChecks;
         vChecks.reserve(nBatchSize);
         unsigned int nNow = 0;
         bool fOk = true;
@@ -89,6 +126,7 @@ private:
                         nTodo -= nNow;
                     if (nTodo == 0 && !fMaster)
                     {
+printf("notify master\n");
                         // We processed the last element; inform the master it can exit and return the result
                         queue.clear();
                         condMaster.notify_one();
@@ -110,9 +148,15 @@ private:
                 {
                     if (fExit)
                         return fAllOk;
-// if todo is zero and not master then we need to create the blockundo files from each thread
                     if ((fMaster) && nTodo == 0)
                     {
+                        if (fAllOk)
+                        {
+                          // Flush the view to the lower level
+          //                 printf("flushing data %ld\n",pData->nChecked);
+          //                 pData->pView->Flush();
+                        }
+
                         nTotal--;
                         bool fRet = fAllOk;
                         // reset the status for new work later
@@ -132,22 +176,33 @@ private:
                 // * Try to account for idle jobs which will instantly start helping.
                 // * Don't do batches smaller than 1 (duh), or larger than nBatchSize.
                 nNow = std::max(1U, std::min(nBatchSize, (unsigned int)queue.size() / (nTotal + nIdle + 1)));
+nNow = 1;
                 vChecks.resize(nNow);
+printf("nNow is %d queue is %lu\n", nNow, queue.size());
                 for (unsigned int i = 0; i < nNow; i++)
                 {
                     // We want the lock on the mutex to be as short as possible, so swap jobs from the global
                     // queue to the local batch vector instead of copying.
-                    vChecks[i].swap(queue.back());
+                    vChecks.push_back(queue.back());
                     queue.pop_back();
                 }
+
+
                 // Check whether we need to do work at all
                 fOk = fAllOk;
             }
             // execute work
-            for (T &check : vChecks)
-                if (fOk)
-                    fOk = check();
-            vChecks.clear();
+            if (fOk)
+            {
+printf("running validation checks\n");
+                fOk = RunValidation(pData, vChecks);
+//fOk=true;
+                vChecks.clear();
+printf("done validation checks size of queue is %lu fOK is %d\n", queue.size(), fOk);
+queue.clear();
+nTodo = 0;
+            }
+
         } while (true);
     }
 
@@ -172,6 +227,7 @@ public:
         condMaster.notify_all();
     }
     //! Add a batch of checks to the queue
+/*
     void Add(std::vector<T> &vChecks)
     {
         boost::unique_lock<boost::mutex> lock(mutex);
@@ -186,11 +242,32 @@ public:
         else if (vChecks.size() > 1)
             condWorker.notify_all();
     }
+*/
+    void SetValidationData(std::shared_ptr<CRunValidationThread> _pData)
+    {
+        boost::unique_lock<boost::mutex> lock(mutex);
+        pData = _pData;
+
+        for (size_t i = 0; i < pData->block->vtx.size(); i++)
+        {
+            queue.push_back(i);
+        }
+
+        nTodo += queue.size();
+printf("ntodo %d\n", nTodo);
+        if (nTodo == 1)
+            condWorker.notify_one();
+        else if (nTodo > 1)
+            condWorker.notify_all();
+    }
+
+    void ClearThreadData() { pData.reset(); }
 
     ~CValidationQueue() {}
     bool IsIdle()
     {
         boost::unique_lock<boost::mutex> lock(mutex);
+printf("ntotal %d nidle %d ntodo %d fallok %d\n", nTotal, nIdle, nTodo, fAllOk);
         return (nTotal == nIdle && nTodo == 0 && fAllOk == true);
     }
 };
@@ -199,16 +276,16 @@ public:
  * RAII-style controller object for a CCheckQueue that guarantees the passed
  * queue is finished before continuing.
  */
-template <typename T>
+//template <typename T>
 class CValidationQueueControl
 {
 private:
-    CValidationQueue<T> *pqueue;
+    CValidationQueue *pqueue;
     bool fDone;
 
 public:
     CValidationQueueControl() {}
-    CValidationQueueControl(CValidationQueue<T> *pqueueIn) : pqueue(pqueueIn), fDone(false)
+    CValidationQueueControl(CValidationQueue *pqueueIn) : pqueue(pqueueIn), fDone(false)
     {
         // passed queue is supposed to be unused, or nullptr
         if (pqueue != nullptr)
@@ -218,7 +295,7 @@ public:
         }
     }
 
-    void Queue(CValidationQueue<T> *pqueueIn)
+    void Queue(CValidationQueue *pqueueIn)
     {
         pqueue = pqueueIn;
         // passed queue is supposed to be unused, or nullptr
@@ -240,12 +317,13 @@ public:
         fDone = true;
         return fRet;
     }
-
+/*
     void Add(std::vector<T> &vChecks)
     {
         if (pqueue != nullptr)
             pqueue->Add(vChecks);
     }
+*/
 
     ~CValidationQueueControl()
     {

@@ -2156,9 +2156,11 @@ static void ConnectBlockScopeExit(bool fParallel,
     PV->SetLocks(fParallel);
 }
 
+
 // Data we pass to the validation threads using a shared pointer. After the thread
 // runs some data still needs to be preseved by the shared pointer to be used after
 // the threads have finished running.
+/*
 struct CRunValidationThread
 {
     // Initialized here on construction but will be modified
@@ -2189,8 +2191,9 @@ struct CRunValidationThread
     int nChecked = 0;
     unsigned int nInputs = 0;
 };
+*/
 
-static void RunValidation(std::shared_ptr<CRunValidationThread> pData)
+bool RunValidation(std::shared_ptr<CRunValidationThread> pData, std::vector<int> &vIndex)
 {
     unsigned int nSigOps = 0;
 
@@ -2231,7 +2234,7 @@ static void RunValidation(std::shared_ptr<CRunValidationThread> pData)
                 // node.
                 if (PV->ChainWorkHasChanged(nStartingChainWork) || PV->QuitReceived(pData->main_thread_id, fParallel))
                 {
-                   return;
+                   return pData->fSuccess;
                 }
                 else
                 {
@@ -2240,7 +2243,7 @@ static void RunValidation(std::shared_ptr<CRunValidationThread> pData)
                                                 pData->block->GetHash().ToString(), i, tx.GetHash().ToString()),
                         REJECT_INVALID, "bad-txns-inputs-missingorspent");
                     PV->Quit(pData->main_thread_id);
-                    return;
+                    return pData->fSuccess;
                 }
             }
 
@@ -2262,7 +2265,7 @@ static void RunValidation(std::shared_ptr<CRunValidationThread> pData)
                     REJECT_INVALID, "bad-txns-nonfinal");
                 pData->fSuccess = false;
                 PV->Quit(pData->main_thread_id);
-                return;
+                return false;
             }
 
             if (fStrictPayToScriptHash)
@@ -2294,7 +2297,7 @@ static void RunValidation(std::shared_ptr<CRunValidationThread> pData)
                         hash.ToString(), FormatStateMessage(*pData->pState));
                     pData->fSuccess = false;
                     PV->Quit(pData->main_thread_id);
-                    return;
+                    return false;
                 }
                 pData->control_scriptchecks->Add(vChecks);
                 pData->nChecked++;
@@ -2312,7 +2315,7 @@ static void RunValidation(std::shared_ptr<CRunValidationThread> pData)
         if (PV->QuitReceived(pData->main_thread_id, fParallel))
         {
             pData->fSuccess = false;
-            return;
+            return false;
         }
 
         // This is for testing PV and slowing down the validation of inputs. This makes
@@ -2322,6 +2325,7 @@ static void RunValidation(std::shared_ptr<CRunValidationThread> pData)
    }
 
    pData->pView->Flush();
+   return true;
 }
 
 bool ConnectBlockCanonicalOrdering(const CBlock &block,
@@ -2366,16 +2370,13 @@ bool ConnectBlockCanonicalOrdering(const CBlock &block,
     // with the mutex so that the checking of inputs can be done with the chosen scriptcheckqueue.
     auto queues = PV->GetScriptCheckQueue();
     CCheckQueue<CScriptCheck> *pScriptQueue = queues.first;
-    CValidationQueue<CRunValidation> * pValidationQueue = queues.second;
+    std::vector<CValidationQueue *> vValidationQueue = queues.second;
     assert(pScriptQueue);
-    assert(pValidationQueue);
+    assert(!vValidationQueue.empty());
 
     // Aquire the control that is used to wait for the script threads to finish. Do this after aquiring the
     // scoped lock to ensure the scriptqueue is free and available.
     CCheckQueueControl<CScriptCheck> control_scriptchecks(fScriptChecks && PV->ThreadCount() ? pScriptQueue : nullptr);
-
-    // Aquire the control used to wait for validation threads to finish. Must have a valid script queue.
-    CValidationQueueControl<CRunValidation> control_spendcoins(pValidationQueue);
 
     // Initialize a PV session.
     if (!PV->Initialize(this_id, pindex, fParallel))
@@ -2422,6 +2423,9 @@ bool ConnectBlockCanonicalOrdering(const CBlock &block,
         // a chance to process in parallel. This is crucial for parallel validation to work.
         // NOTE: the only place where cs_main is needed is if we hit PV->ChainWorkHasChanged, which
         //       internally grabs the cs_main lock when needed.
+
+        // Aquire the control used to wait for validation threads to finish. Must have a valid script queue.
+   //     CValidationQueueControl<CRunValidation> control_spendcoins(pValidationQueue);
 
         // Calculate the number of validation thread to run
         unsigned int numThreads = 4;
@@ -2477,11 +2481,12 @@ bool ConnectBlockCanonicalOrdering(const CBlock &block,
             nBeginIndex = nEndIndex + 1;
 
             // Launch thread
+ std::vector<int> vIndex;
             vThreadData.push_back(pData);
-            validation_threads.create_thread(boost::bind(&RunValidation, pData));
+            validation_threads.create_thread(boost::bind(&RunValidation, pData, vIndex));
         }
         validation_threads.join_all();
-        control_spendcoins.Wait();
+    //    control_spendcoins.Wait();
 
         runthreads += GetStopwatchMicros() - nStartTime;
         LOGA("total runthreads is %5.6f\n", (double)runthreads.load() / 1000000);
