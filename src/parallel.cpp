@@ -104,9 +104,9 @@ CParallelValidation::CParallelValidation() : nThreads(0), semThreadCount(DEFAULT
 
         // create the spend coin threads
         std::vector<CValidationQueue *> vSpendCoinThreads GUARDED_BY(cs_blockvalidationthread);
+        auto validationQueue = new CValidationQueue(128);
         for (unsigned int i = 0; i < nThreads; i++)
         {
-            auto validationQueue = new CValidationQueue(128);
             threadGroup_SpendCoin.create_thread(boost::bind(&AddSpendCoinThreads, i + 1, validationQueue));
             vSpendCoinThreads.push_back(validationQueue);
         }
@@ -122,6 +122,7 @@ CParallelValidation::~CParallelValidation()
     for (auto &queue : vScriptQueues)
         delete queue;
 
+/*
     for (auto &queue : vSpendCoinQueues)
         for (auto &thread : queue)
             thread->Shutdown();
@@ -129,6 +130,7 @@ CParallelValidation::~CParallelValidation()
     for (auto &queue : vSpendCoinQueues)
         for (auto &thread : queue)
             delete thread;
+*/
 }
 
 unsigned int CParallelValidation::QueueCount()

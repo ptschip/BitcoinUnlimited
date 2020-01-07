@@ -2037,7 +2037,6 @@ bool ConnectBlockPrevalidations(const CBlock &block,
     // In addition, if we had just restarted the node and continued IBD, started a Reindex, or found a new block
     // then setBlockAlreadyChecked would be empty and we'd have to run CheckBlock() at least one time, which is
     // correct behavior.
-    // Check it again in case a previous version let a bad block in
     if (!CheckBlock(block, state, !fJustCheck, !fJustCheck))
     {
         bool fAlreadyChecked = true;
@@ -2156,43 +2155,6 @@ static void ConnectBlockScopeExit(bool fParallel,
     PV->SetLocks(fParallel);
 }
 
-
-// Data we pass to the validation threads using a shared pointer. After the thread
-// runs some data still needs to be preseved by the shared pointer to be used after
-// the threads have finished running.
-/*
-struct CRunValidationThread
-{
-    // Initialized here on construction but will be modified
-    // and used locally only.
-    std::shared_ptr<CCoinsViewCache> pView;
-    CBlockIndex *pindex;
-    const CBlock *block;
-    CCheckQueueControl<CScriptCheck> *control_scriptchecks;
-    boost::thread::id main_thread_id;
-    uint32_t flags = 0;
-    int nLockTimeFlags = 0;
-    uint32_t nBeginIndex = 0;
-    uint32_t nEndIndex = 0;
-    bool fJustCheck = false;
-    bool fParallel = true;
-    bool fScriptChecks = true;
-    bool fSuccess = true;
-
-    // Return values
-    std::shared_ptr<CBlockUndo> pBlockUndo;
-    std::shared_ptr<ValidationResourceTracker> pResourceTracker;
-    std::shared_ptr<CValidationState> pState;
-
-    // These are set here and used locally but need
-    // to be returned to the main thread to be summed.
-    int nFees = 0;
-    int nUnVerifiedChecked = 0;
-    int nChecked = 0;
-    unsigned int nInputs = 0;
-};
-*/
-
 bool RunValidation(std::shared_ptr<CRunValidationThread> pData, std::vector<int> &vIndex)
 {
     unsigned int nSigOps = 0;
@@ -2211,7 +2173,8 @@ bool RunValidation(std::shared_ptr<CRunValidationThread> pData, std::vector<int>
 
     std::vector<int> prevheights;
     bool fStrictPayToScriptHash = flags & SCRIPT_VERIFY_P2SH;
-    for (unsigned int i = pData->nBeginIndex; i <= pData->nEndIndex; i++)
+    std::map<int, CTxUndo> mapTempUndo;
+    for (int i : vIndex)
     {
         const CTransaction &tx = *pData->block->vtx[i];
         const CTransactionRef &txref = pData->block->vtx[i];
@@ -2221,7 +2184,6 @@ bool RunValidation(std::shared_ptr<CRunValidationThread> pData, std::vector<int>
         // if (nSigOps > MAX_BLOCK_SIGOPS)
         //     return state.DOS(100, error("ConnectBlock(): too many sigops"),
         //                     REJECT_INVALID, "bad-blk-sigops");
-
         if (!tx.IsCoinBase())
         {
             if (!pData->pView->HaveInputs(tx))
@@ -2246,6 +2208,7 @@ bool RunValidation(std::shared_ptr<CRunValidationThread> pData, std::vector<int>
                     return pData->fSuccess;
                 }
             }
+
 
             // Check that transaction is BIP68 final
             // BIP68 lock checks (as opposed to nLockTime checks) must
@@ -2289,7 +2252,7 @@ bool RunValidation(std::shared_ptr<CRunValidationThread> pData, std::vector<int>
 
                 std::vector<CScriptCheck> vChecks;
                 bool fCacheResults = fJustCheck; /* Don't cache results if we're actually connecting blocks
-                                                       (still consult the cache, though) */
+                                                       (still consult the cache, though) */ 
                 if (!CheckInputs(txref, *pData->pState, *pView, fScriptChecks, flags, maxScriptOps.Value(),
                         fCacheResults, &(*pData->pResourceTracker), PV->ThreadCount() ? &vChecks : nullptr))
                 {
@@ -2302,15 +2265,12 @@ bool RunValidation(std::shared_ptr<CRunValidationThread> pData, std::vector<int>
                 pData->control_scriptchecks->Add(vChecks);
                 pData->nChecked++;
             }
-        }
 
-        CTxUndo undoDummy;
-        if (i > 0)
-        {
-            pData->pBlockUndo->vtxundo.push_back(CTxUndo());
+            // Spend the coins and add entry to the undo file
+            CTxUndo undoDummy;
+            SpendCoins(tx, *pData->pState, *pView, undoDummy, pindex->nHeight);
+            mapTempUndo[i] = std::move(undoDummy);
         }
-
-        SpendCoins(tx, *pData->pState, *pView, i == 0 ? undoDummy : pData->pBlockUndo->vtxundo.back(), pindex->nHeight);
 
         if (PV->QuitReceived(pData->main_thread_id, fParallel))
         {
@@ -2324,7 +2284,11 @@ bool RunValidation(std::shared_ptr<CRunValidationThread> pData, std::vector<int>
             MilliSleep(1000);
    }
 
-   pData->pView->Flush();
+   // Add our local undo data to the main undo map
+   static CCriticalSection cs_undo;
+   LOCK(cs_undo);
+   pData->pMapBlockUndo->insert(std::make_move_iterator(mapTempUndo.begin()), std::make_move_iterator(mapTempUndo.end()));
+
    return true;
 }
 
@@ -2428,6 +2392,7 @@ bool ConnectBlockCanonicalOrdering(const CBlock &block,
         CValidationQueueControl control_spendcoins(vValidationQueue[0]);
 
         // Calculate the number of validation thread to run
+        //unsigned int numThreads = vValidationQueue.size();
         unsigned int numThreads = 1;
         if (block.vtx.size() < numThreads)
             numThreads = block.vtx.size();
@@ -2438,7 +2403,10 @@ bool ConnectBlockCanonicalOrdering(const CBlock &block,
         uint32_t nBeginIndex = 0;
         boost::thread_group validation_threads;
         std::vector<std::shared_ptr<CRunValidationThread> > vThreadData;
-        for (unsigned int i = 0; i < numThreads; i++)
+
+        // Setup the data for the threads to work on
+        CRunValidationThread *data = new CRunValidationThread();
+        std::shared_ptr<CRunValidationThread> pData(data);
         {
             // Initialize the view
             CCoinsViewCache *viewThread = new CCoinsViewCache(&view);
@@ -2446,8 +2414,6 @@ bool ConnectBlockCanonicalOrdering(const CBlock &block,
             pViewThread->SetBestBlock(view.GetBestBlock());
 
             // Initialize the shared data object
-            CRunValidationThread *data = new CRunValidationThread();
-            std::shared_ptr<CRunValidationThread> pData(data);
             pData->pView = pViewThread;
             pData->flags = flags;
             pData->nLockTimeFlags = nLockTimeFlags;
@@ -2470,23 +2436,23 @@ bool ConnectBlockCanonicalOrdering(const CBlock &block,
             std::shared_ptr<CBlockUndo> pBlockUndo(thread_blockundo);
             pData->pBlockUndo = pBlockUndo;
 
-            // Calculate the indices used for which part of the block this
-            // thread will process
-            uint32_t nRange = block.vtx.size() / numThreads;
-            uint32_t nEndIndex = (i + 1) * nRange;
-            if ((i + 1) == numThreads)
-                nEndIndex = block.vtx.size() - 1;
-            pData->nBeginIndex = nBeginIndex;
-            pData->nEndIndex = nEndIndex;
-            nBeginIndex = nEndIndex + 1;
+            // Create a separate blockundo map to track for each thread
+            // and which keeps the order of transactions intact.
+            std::map<int, CTxUndo> *thread_txundo = new std::map<int, CTxUndo>();
+            std::shared_ptr<std::map<int, CTxUndo> > pMapBlockUndo(thread_txundo);
+            pData->pMapBlockUndo = pMapBlockUndo;
 
-            // Launch thread
- std::vector<int> vIndex;
+            // Set thread data
+            std::vector<int> vIndex;
             vThreadData.push_back(pData);
-            validation_threads.create_thread(boost::bind(&RunValidation, pData, vIndex));
+            vValidationQueue[0]->SetValidationData(pData);
         }
-        validation_threads.join_all();
-    //    control_spendcoins.Wait();
+        // Wait for threads to complete
+        uint64_t nStartTimeControl = GetStopwatchMicros();
+        static std::atomic<int64_t> control_threads{0};
+        control_spendcoins.Wait();
+        control_threads += GetStopwatchMicros() - nStartTimeControl;
+        LOGA("total controlthreads is %5.6f\n", (double)control_threads.load() / 1000000);
 
         runthreads += GetStopwatchMicros() - nStartTime;
         LOGA("total runthreads is %5.6f\n", (double)runthreads.load() / 1000000);
@@ -2508,9 +2474,15 @@ bool ConnectBlockCanonicalOrdering(const CBlock &block,
             nChecked += it->nChecked;
             nUnVerifiedChecked += it->nUnVerifiedChecked;
             nInputs += it->nInputs;
-
-            blockundo.vtxundo.insert(blockundo.vtxundo.end(), it->pBlockUndo->vtxundo.begin(), it->pBlockUndo->vtxundo.end());
         }
+
+        // Consolidate the blockundo data from each thread
+        blockundo.vtxundo.reserve(pData->pMapBlockUndo->size());
+        for (auto &it : *pData->pMapBlockUndo)
+        {
+            blockundo.vtxundo.push_back(std::move(it.second));
+        }
+
         flushthreads += GetStopwatchMicros() - nStartTime;
         LOGA("total flushthreads is %5.6f\n", (double)flushthreads.load() / 1000000);
 

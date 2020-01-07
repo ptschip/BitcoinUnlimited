@@ -156,7 +156,13 @@ void CCoinsViewCache::AddCoin(const COutPoint &outpoint, Coin &&coin, bool possi
 void CCoinsViewCache::SpendCoin(const COutPoint &outpoint, Coin *moveout)
 {
     WRITELOCK(cs_utxo);
-    CCoinsMap::iterator it = FetchCoin(outpoint, nullptr);
+    _SpendCoin(outpoint, moveout);
+}
+
+void CCoinsViewCache::_SpendCoin(const COutPoint &outpoint, Coin *moveout)
+{
+    CDeferredSharedLocker lock(cs_utxo);
+    CCoinsMap::iterator it = FetchCoin(outpoint, &lock);
     if (it == cacheCoins.end())
         return;
     cachedCoinsUsage -= it->second.coin.DynamicMemoryUsage();
@@ -599,7 +605,7 @@ void SpendCoins(const CTransaction &tx, CValidationState &state, CCoinsViewCache
         for (const CTxIn &txin : tx.vin)
         {
             txundo.vprevout.emplace_back();
-            inputs.SpendCoin(txin.prevout, &txundo.vprevout.back());
+            inputs._SpendCoin(txin.prevout, &txundo.vprevout.back());
         }
     }
 }

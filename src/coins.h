@@ -329,6 +329,7 @@ public:
      * has no effect.
      */
     void SpendCoin(const COutPoint &outpoint, Coin *moveto = nullptr);
+    void _SpendCoin(const COutPoint &outpoint, Coin *moveto = nullptr);
 
     /**
      * Push the modifications applied to this cache to its base.

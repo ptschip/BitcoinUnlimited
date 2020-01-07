@@ -14,7 +14,6 @@
 #include <boost/thread/locks.hpp>
 #include <boost/thread/mutex.hpp>
 
-//void RunValidation(std::shared_ptr<CRunValidationThread> pData);
 struct CRunValidationThread
 {
     // Initialized here on construction but will be modified
@@ -26,20 +25,25 @@ struct CRunValidationThread
     boost::thread::id main_thread_id;
     uint32_t flags = 0;
     int nLockTimeFlags = 0;
-    uint32_t nBeginIndex = 0;
-    uint32_t nEndIndex = 0;
     bool fJustCheck = false;
     bool fParallel = true;
     bool fScriptChecks = true;
     bool fSuccess = true;
+    //std::atomic<bool> fSuccess = true; // TODO: needs a copy constructor
 
     // Return values
-    std::shared_ptr<CBlockUndo> pBlockUndo;
-    std::shared_ptr<ValidationResourceTracker> pResourceTracker;
-    std::shared_ptr<CValidationState> pState;
+    std::shared_ptr<CBlockUndo> pBlockUndo; // TODO do we still need this?
+    std::shared_ptr<std::map<int, CTxUndo> > pMapBlockUndo;
+    std::shared_ptr<ValidationResourceTracker> pResourceTracker;  // TODO local resource tracker and collate?
+    std::shared_ptr<CValidationState> pState; // TODO handle state need some locking?
 
     // These are set here and used locally but need
     // to be returned to the main thread to be summed.
+//TODO: make these atomic and no need to sum them later....need a copy constructor
+  //  std::atomic<int> nFees = 0;
+  //  std::atomic<int> nUnVerifiedChecked = 0;
+  //  std::atomic<int> nChecked = 0;
+  //  std::atomic<unsigned int> nInputs = 0;
     int nFees = 0;
     int nUnVerifiedChecked = 0;
     int nChecked = 0;
@@ -47,7 +51,6 @@ struct CRunValidationThread
 };
 bool RunValidation(std::shared_ptr<CRunValidationThread> pData, std::vector<int> &vIndex);
 
-//template <typename T>
 class CValidationQueueControl;
 
 /**
@@ -103,8 +106,6 @@ private:
 
     //! A shared point to data that is passed in and also used to return data to the main thread
     std::shared_ptr<CRunValidationThread> pData;
-    uint32_t nBeginIndex;
-    uint32_t nEndIndex;
 
     /** Internal function that does bulk of the verification work. */
     bool Loop(bool fMaster = false)
@@ -126,7 +127,9 @@ private:
                         nTodo -= nNow;
                     if (nTodo == 0 && !fMaster)
                     {
-printf("notify master\n");
+                        // flush the data to the lower lever view
+                        pData->pView->Flush();
+
                         // We processed the last element; inform the master it can exit and return the result
                         queue.clear();
                         condMaster.notify_one();
@@ -150,13 +153,6 @@ printf("notify master\n");
                         return fAllOk;
                     if ((fMaster) && nTodo == 0)
                     {
-                        if (fAllOk)
-                        {
-                          // Flush the view to the lower level
-          //                 printf("flushing data %ld\n",pData->nChecked);
-          //                 pData->pView->Flush();
-                        }
-
                         nTotal--;
                         bool fRet = fAllOk;
                         // reset the status for new work later
@@ -176,9 +172,6 @@ printf("notify master\n");
                 // * Try to account for idle jobs which will instantly start helping.
                 // * Don't do batches smaller than 1 (duh), or larger than nBatchSize.
                 nNow = std::max(1U, std::min(nBatchSize, (unsigned int)queue.size() / (nTotal + nIdle + 1)));
-nNow = 1;
-                vChecks.resize(nNow);
-printf("nNow is %d queue is %lu\n", nNow, queue.size());
                 for (unsigned int i = 0; i < nNow; i++)
                 {
                     // We want the lock on the mutex to be as short as possible, so swap jobs from the global
@@ -187,20 +180,15 @@ printf("nNow is %d queue is %lu\n", nNow, queue.size());
                     queue.pop_back();
                 }
 
-
                 // Check whether we need to do work at all
                 fOk = fAllOk;
             }
             // execute work
             if (fOk)
             {
-printf("running validation checks\n");
                 fOk = RunValidation(pData, vChecks);
-//fOk=true;
                 vChecks.clear();
-printf("done validation checks size of queue is %lu fOK is %d\n", queue.size(), fOk);
-queue.clear();
-nTodo = 0;
+//LOGA("idle threads: %d running %d items in batch , nnow is: %d total: %d\n", nIdle, nBatchSize, nNow, nTodo);
             }
 
         } while (true);
@@ -226,23 +214,7 @@ public:
         condWorker.notify_all();
         condMaster.notify_all();
     }
-    //! Add a batch of checks to the queue
-/*
-    void Add(std::vector<T> &vChecks)
-    {
-        boost::unique_lock<boost::mutex> lock(mutex);
-        for (T &check : vChecks)
-        {
-            queue.push_back(T());
-            check.swap(queue.back());
-        }
-        nTodo += vChecks.size();
-        if (vChecks.size() == 1)
-            condWorker.notify_one();
-        else if (vChecks.size() > 1)
-            condWorker.notify_all();
-    }
-*/
+    //! Add data object to the queue
     void SetValidationData(std::shared_ptr<CRunValidationThread> _pData)
     {
         boost::unique_lock<boost::mutex> lock(mutex);
@@ -252,9 +224,9 @@ public:
         {
             queue.push_back(i);
         }
+        std::reverse(queue.begin(), queue.end());
 
         nTodo += queue.size();
-printf("ntodo %d\n", nTodo);
         if (nTodo == 1)
             condWorker.notify_one();
         else if (nTodo > 1)
@@ -267,7 +239,6 @@ printf("ntodo %d\n", nTodo);
     bool IsIdle()
     {
         boost::unique_lock<boost::mutex> lock(mutex);
-printf("ntotal %d nidle %d ntodo %d fallok %d\n", nTotal, nIdle, nTodo, fAllOk);
         return (nTotal == nIdle && nTodo == 0 && fAllOk == true);
     }
 };
@@ -317,13 +288,6 @@ public:
         fDone = true;
         return fRet;
     }
-/*
-    void Add(std::vector<T> &vChecks)
-    {
-        if (pqueue != nullptr)
-            pqueue->Add(vChecks);
-    }
-*/
 
     ~CValidationQueueControl()
     {
