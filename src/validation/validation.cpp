@@ -2037,7 +2037,6 @@ bool ConnectBlockPrevalidations(const CBlock &block,
     // In addition, if we had just restarted the node and continued IBD, started a Reindex, or found a new block
     // then setBlockAlreadyChecked would be empty and we'd have to run CheckBlock() at least one time, which is
     // correct behavior.
-    // Check it again in case a previous version let a bad block in
     if (!CheckBlock(block, state, !fJustCheck, !fJustCheck))
     {
         bool fAlreadyChecked = true;
@@ -2308,15 +2307,19 @@ bool RunValidation(std::shared_ptr<CRunValidationThread> pData, std::vector<int>
         static CCriticalSection cs_undo; // TODO: have some local structure and then concatenate at the end rather than
                                          // every time..also can do for state and resource tracker.
         {
-            LOCK(cs_undo);
             CTxUndo undoDummy;
             if (i > 0)
             {
-                pData->pBlockUndo->vtxundo.push_back(CTxUndo());
+             //   pData->pBlockUndo->vtxundo.push_back(CTxUndo());
             }
-            SpendCoins(tx, *pData->pState, *pView, i == 0 ? undoDummy : pData->pBlockUndo->vtxundo.back(), pindex->nHeight);
+           // SpendCoins(tx, *pData->pState, *pView, i == 0 ? undoDummy : pData->pBlockUndo->vtxundo.back(), pindex->nHeight);
+            SpendCoins(tx, *pData->pState, *pView, i == 0 ? undoDummy : undoDummy, pindex->nHeight);
             if (i > 0)
-                pData->pMapBlockUndo->emplace(i, pData->pBlockUndo->vtxundo.back());
+            {
+                LOCK(cs_undo);
+       //         pData->pMapBlockUndo->emplace(i, pData->pBlockUndo->vtxundo.back());
+                pData->pMapBlockUndo->emplace(i, std::move(undoDummy));
+            }
         }
 
         if (PV->QuitReceived(pData->main_thread_id, fParallel))
@@ -2331,7 +2334,6 @@ bool RunValidation(std::shared_ptr<CRunValidationThread> pData, std::vector<int>
             MilliSleep(1000);
    }
 
-   pData->pView->Flush();
    return true;
 }
 
@@ -2446,8 +2448,9 @@ bool ConnectBlockCanonicalOrdering(const CBlock &block,
         uint32_t nBeginIndex = 0;
         boost::thread_group validation_threads;
         std::vector<std::shared_ptr<CRunValidationThread> > vThreadData;
-     //   for (unsigned int i = 0; i < numThreads; i++)
-     //   {
+
+        // Setup the data for the threads to work on
+        {
             // Initialize the view
             CCoinsViewCache *viewThread = new CCoinsViewCache(&view);
             std::shared_ptr<CCoinsViewCache> pViewThread(viewThread);
@@ -2482,24 +2485,18 @@ bool ConnectBlockCanonicalOrdering(const CBlock &block,
             // and which keeps the order of transactions intact.
             std::map<int, CTxUndo> *thread_txundo = new std::map<int, CTxUndo>();
             std::shared_ptr<std::map<int, CTxUndo> > pMapBlockUndo(thread_txundo);
-         //   std::shared_ptr<std::map<int, CTxUndo> > pMapBlockUndo;
-           pData->pMapBlockUndo = pMapBlockUndo;
+            pData->pMapBlockUndo = pMapBlockUndo;
 
-            // Calculate the indices used for which part of the block this
-            // thread will process
-          //   uint32_t nEndIndex = (i + 1) * nRange;
-          //  if ((i + 1) == numThreads)
-          //      nEndIndex = block.vtx.size() - 1;
-          //  pData->nBeginIndex = nBeginIndex;
-          //  pData->nEndIndex = nEndIndex;
-          //  nBeginIndex = nEndIndex + 1;
-
-            // Launch thread
+            // Set thread data
             std::vector<int> vIndex;
             vThreadData.push_back(pData);
             vValidationQueue[0]->SetValidationData(pData);
-      //  }
+        }
+        // Launch threads and wait for completion
+        uint64_t nStartTimeControl = GetStopwatchMicros();
+        static std::atomic<int64_t> control_threads{0};
         control_spendcoins.Wait();
+        control_threads += GetStopwatchMicros() - nStartTimeControl;
 
         runthreads += GetStopwatchMicros() - nStartTime;
         LOGA("total runthreads is %5.6f\n", (double)runthreads.load() / 1000000);

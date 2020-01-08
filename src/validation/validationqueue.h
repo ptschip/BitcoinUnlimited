@@ -105,8 +105,6 @@ private:
 
     //! A shared point to data that is passed in and also used to return data to the main thread
     std::shared_ptr<CRunValidationThread> pData;
-    uint32_t nBeginIndex;
-    uint32_t nEndIndex;
 
     /** Internal function that does bulk of the verification work. */
     bool Loop(bool fMaster = false)
@@ -128,6 +126,9 @@ private:
                         nTodo -= nNow;
                     if (nTodo == 0 && !fMaster)
                     {
+                        // flush the data to the lower lever view
+                        pData->pView->Flush();
+
                         // We processed the last element; inform the master it can exit and return the result
                         queue.clear();
                         condMaster.notify_one();
@@ -171,7 +172,7 @@ private:
                 // * Don't do batches smaller than 1 (duh), or larger than nBatchSize.
                 nNow = std::max(1U, std::min(nBatchSize, (unsigned int)queue.size() / (nTotal + nIdle + 1)));
 //nNow = 1;
-nNow = queue.size();
+//nNow = queue.size();
                 for (unsigned int i = 0; i < nNow; i++)
                 {
 //printf("%d added to vchecks\n", queue.back());
