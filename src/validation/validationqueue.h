@@ -32,9 +32,11 @@ struct CRunValidationThread
     bool fParallel = true;
     bool fScriptChecks = true;
     bool fSuccess = true;
+    //std::atomic<bool> fSuccess = true; // TODO: needs a copy constructor
 
     // Return values
     std::shared_ptr<CBlockUndo> pBlockUndo;
+    std::shared_ptr<std::map<int, CTxUndo> > pMapBlockUndo;
     std::shared_ptr<ValidationResourceTracker> pResourceTracker;
     std::shared_ptr<CValidationState> pState;
 
@@ -126,7 +128,6 @@ private:
                         nTodo -= nNow;
                     if (nTodo == 0 && !fMaster)
                     {
-//printf("notify master\n");
                         // We processed the last element; inform the master it can exit and return the result
                         queue.clear();
                         condMaster.notify_one();
@@ -150,13 +151,6 @@ private:
                         return fAllOk;
                     if ((fMaster) && nTodo == 0)
                     {
-                        if (fAllOk)
-                        {
-                          // Flush the view to the lower level
-          //                 printf("flushing data %ld\n",pData->nChecked);
-          //                 pData->pView->Flush();
-                        }
-
                         nTotal--;
                         bool fRet = fAllOk;
                         // reset the status for new work later
@@ -176,17 +170,16 @@ private:
                 // * Try to account for idle jobs which will instantly start helping.
                 // * Don't do batches smaller than 1 (duh), or larger than nBatchSize.
                 nNow = std::max(1U, std::min(nBatchSize, (unsigned int)queue.size() / (nTotal + nIdle + 1)));
-nNow = 1;
-                vChecks.resize(nNow);
-//printf("nNow is %d queue is %lu\n", nNow, queue.size());
+//nNow = 1;
+nNow = queue.size();
                 for (unsigned int i = 0; i < nNow; i++)
                 {
+//printf("%d added to vchecks\n", queue.back());
                     // We want the lock on the mutex to be as short as possible, so swap jobs from the global
                     // queue to the local batch vector instead of copying.
                     vChecks.push_back(queue.back());
                     queue.pop_back();
                 }
-
 
                 // Check whether we need to do work at all
                 fOk = fAllOk;
@@ -194,13 +187,9 @@ nNow = 1;
             // execute work
             if (fOk)
             {
-//printf("running validation checks\n");
                 fOk = RunValidation(pData, vChecks);
-//fOk=true;
                 vChecks.clear();
-printf("done validation checks size of queue is %lu fOK is %d\n", queue.size(), fOk);
-queue.clear();
-nTodo = 0;
+//printf("done validation checks size of queue is %lu fOK is %d\n", queue.size(), fOk);
             }
 
         } while (true);
@@ -251,12 +240,10 @@ public:
         for (size_t i = 0; i < pData->block->vtx.size(); i++)
         {
             queue.push_back(i);
-break;
         }
+        std::reverse(queue.begin(), queue.end());
 
         nTodo += queue.size();
-nTodo = 1;
-//printf("ntodo %d\n", nTodo);
         if (nTodo == 1)
             condWorker.notify_one();
         else if (nTodo > 1)
@@ -269,7 +256,6 @@ nTodo = 1;
     bool IsIdle()
     {
         boost::unique_lock<boost::mutex> lock(mutex);
-//printf("ntotal %d nidle %d ntodo %d fallok %d\n", nTotal, nIdle, nTodo, fAllOk);
         return (nTotal == nIdle && nTodo == 0 && fAllOk == true);
     }
 };
