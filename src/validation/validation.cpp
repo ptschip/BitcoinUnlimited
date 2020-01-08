@@ -2450,6 +2450,8 @@ bool ConnectBlockCanonicalOrdering(const CBlock &block,
         std::vector<std::shared_ptr<CRunValidationThread> > vThreadData;
 
         // Setup the data for the threads to work on
+        CRunValidationThread *data = new CRunValidationThread();
+        std::shared_ptr<CRunValidationThread> pData(data);
         {
             // Initialize the view
             CCoinsViewCache *viewThread = new CCoinsViewCache(&view);
@@ -2457,8 +2459,6 @@ bool ConnectBlockCanonicalOrdering(const CBlock &block,
             pViewThread->SetBestBlock(view.GetBestBlock());
 
             // Initialize the shared data object
-            CRunValidationThread *data = new CRunValidationThread();
-            std::shared_ptr<CRunValidationThread> pData(data);
             pData->pView = pViewThread;
             pData->flags = flags;
             pData->nLockTimeFlags = nLockTimeFlags;
@@ -2497,6 +2497,7 @@ bool ConnectBlockCanonicalOrdering(const CBlock &block,
         static std::atomic<int64_t> control_threads{0};
         control_spendcoins.Wait();
         control_threads += GetStopwatchMicros() - nStartTimeControl;
+        LOGA("total controlthreads is %5.6f\n", (double)control_threads.load() / 1000000);
 
         runthreads += GetStopwatchMicros() - nStartTime;
         LOGA("total runthreads is %5.6f\n", (double)runthreads.load() / 1000000);
