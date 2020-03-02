@@ -128,7 +128,7 @@ private:
                     if (nTodo == 0 && !fMaster)
                     {
                         // flush the data to the lower lever view
-                        pData->pView->Flush();
+                    //    pData->pView->Flush();
 
                         // We processed the last element; inform the master it can exit and return the result
                         queue.clear();

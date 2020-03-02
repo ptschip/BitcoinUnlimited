@@ -2186,7 +2186,7 @@ bool RunValidation(std::shared_ptr<CRunValidationThread> pData, std::vector<int>
         //                     REJECT_INVALID, "bad-blk-sigops");
         if (!tx.IsCoinBase())
         {
-            if (!pData->pView->HaveInputs(tx))
+            if (!pData->pView->HaveInputs(tx, false))
             {
                 pData->fSuccess = false;
 
@@ -2238,6 +2238,7 @@ bool RunValidation(std::shared_ptr<CRunValidationThread> pData, std::vector<int>
                 // an incredibly-expensive-to-validate block.
                 nSigOps += GetP2SHSigOpCount(txref, *pView, flags);
             }
+
 
             pData->nFees += pView->GetValueIn(tx) - tx.GetValueOut();
 
@@ -2360,6 +2361,7 @@ bool ConnectBlockCanonicalOrdering(const CBlock &block,
             ConnectBlockScopeExit(fParallel, control_scriptchecks, pScriptQueue);
         }
         BOOST_SCOPE_EXIT_END
+        uint64_t nStartTimeRun = GetStopwatchMicros();
 
         // Outputs then Inputs algorithm: add outputs to the coin cache
         // and validate lexical ordering
@@ -2382,6 +2384,8 @@ bool ConnectBlockCanonicalOrdering(const CBlock &block,
         checkcoins += GetStopwatchMicros() - nStartTime;
         LOGA("total checkcoins is %5.6f\n", (double)checkcoins.load() / 1000000);
 
+        static std::atomic<int64_t> aquire_control{0};
+        uint64_t nStartTimeAquire = GetStopwatchMicros();
         // Start checking Inputs
         // When in parallel mode then unlock cs_main for this loop to give any other threads
         // a chance to process in parallel. This is crucial for parallel validation to work.
@@ -2396,21 +2400,25 @@ bool ConnectBlockCanonicalOrdering(const CBlock &block,
         unsigned int numThreads = 1;
         if (block.vtx.size() < numThreads)
             numThreads = block.vtx.size();
+        aquire_control += GetStopwatchMicros() - nStartTimeAquire;
+        LOGA("total aquire control is %5.6f\n", (double)aquire_control.load() / 1000000);
 
         nStartTime = GetStopwatchMicros();
         static std::atomic<int64_t> runthreads{0};
         // Initialize and launch threads
         uint32_t nBeginIndex = 0;
-        boost::thread_group validation_threads;
+
+        static std::atomic<int64_t> init_threads{0};
+        uint64_t nStartTimeInit = GetStopwatchMicros();
+
         std::vector<std::shared_ptr<CRunValidationThread> > vThreadData;
 
         // Setup the data for the threads to work on
         CRunValidationThread *data = new CRunValidationThread();
         std::shared_ptr<CRunValidationThread> pData(data);
-        {
+       // {
             // Initialize the view
-            CCoinsViewCache *viewThread = new CCoinsViewCache(&view);
-            std::shared_ptr<CCoinsViewCache> pViewThread(viewThread);
+            std::shared_ptr<CCoinsViewCache> pViewThread = std::make_shared<CCoinsViewCache>(&view);
             pViewThread->SetBestBlock(view.GetBestBlock());
 
             // Initialize the shared data object
@@ -2431,11 +2439,6 @@ bool ConnectBlockCanonicalOrdering(const CBlock &block,
             std::shared_ptr<CValidationState> pState(threadState);
             pData->pState = pState;
 
-            // Create a separate blockundo to track for each thread
-            CBlockUndo *thread_blockundo = new CBlockUndo();
-            std::shared_ptr<CBlockUndo> pBlockUndo(thread_blockundo);
-            pData->pBlockUndo = pBlockUndo;
-
             // Create a separate blockundo map to track for each thread
             // and which keeps the order of transactions intact.
             std::map<int, CTxUndo> *thread_txundo = new std::map<int, CTxUndo>();
@@ -2445,16 +2448,18 @@ bool ConnectBlockCanonicalOrdering(const CBlock &block,
             // Set thread data
             std::vector<int> vIndex;
             vThreadData.push_back(pData);
-            vValidationQueue[0]->SetValidationData(pData);
-        }
-        // Wait for threads to complete
         uint64_t nStartTimeControl = GetStopwatchMicros();
+            vValidationQueue[0]->SetValidationData(pData);
+       // }
+        init_threads += GetStopwatchMicros() - nStartTimeInit;
+        LOGA("total initthreads is %5.6f\n", (double)init_threads.load() / 1000000);
+        // Wait for threads to complete
         static std::atomic<int64_t> control_threads{0};
         control_spendcoins.Wait();
         control_threads += GetStopwatchMicros() - nStartTimeControl;
         LOGA("total controlthreads is %5.6f\n", (double)control_threads.load() / 1000000);
 
-        runthreads += GetStopwatchMicros() - nStartTime;
+        runthreads += GetStopwatchMicros() - nStartTimeRun;
         LOGA("total runthreads is %5.6f\n", (double)runthreads.load() / 1000000);
 
         nStartTime = GetStopwatchMicros();

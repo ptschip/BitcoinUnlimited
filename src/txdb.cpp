@@ -68,7 +68,7 @@ bool CCoinsViewDB::GetCoin(const COutPoint &outpoint, Coin &coin) const
     return db.Read(CoinEntry(&outpoint), coin);
 }
 
-bool CCoinsViewDB::HaveCoin(const COutPoint &outpoint) const
+bool CCoinsViewDB::HaveCoin(const COutPoint &outpoint, bool fLockLevel)
 {
     READLOCK(cs_utxo);
     return db.Exists(CoinEntry(&outpoint));

@@ -126,7 +126,7 @@ public:
     CCoinsViewDB(size_t nCacheSize, bool fMemory = false, bool fWipe = false);
 
     bool GetCoin(const COutPoint &outpoint, Coin &coin) const override;
-    bool HaveCoin(const COutPoint &outpoint) const override;
+    bool HaveCoin(const COutPoint &outpoint, bool fLockLevel = true);
     uint256 GetBestBlock() const;
     uint256 _GetBestBlock() const override;
     uint256 GetBestBlock(BlockDBMode mode) const;

@@ -165,7 +165,7 @@ public:
 
     //! Just check whether we have data for a given outpoint.
     //! This may (but cannot always) return true for spent outputs.
-    virtual bool HaveCoin(const COutPoint &outpoint) const;
+    virtual bool HaveCoin(const COutPoint &outpoint, bool fLockLevel = true) const;
 
     //! Retrieve the block hash whose state this CCoinsView currently represents
     virtual uint256 _GetBestBlock() const;
@@ -201,7 +201,7 @@ protected:
 public:
     CCoinsViewBacked(CCoinsView *viewIn);
     bool GetCoin(const COutPoint &outpoint, Coin &coin) const override;
-    bool HaveCoin(const COutPoint &outpoint) const override;
+    bool HaveCoin(const COutPoint &outpoint, bool fLockLevel = true) const override;
     uint256 _GetBestBlock() const override;
     void SetBackend(CCoinsView &viewIn);
     bool BatchWrite(CCoinsMap &mapCoins,
@@ -284,7 +284,7 @@ public:
 
     // Standard CCoinsView methods
     bool GetCoin(const COutPoint &outpoint, Coin &coin) const;
-    bool HaveCoin(const COutPoint &outpoint) const;
+    bool HaveCoin(const COutPoint &outpoint, bool fLockLevel = true) const;
     uint256 GetBestBlock() const;
     uint256 _GetBestBlock() const;
     void SetBestBlock(const uint256 &hashBlock);
@@ -388,7 +388,7 @@ public:
     CAmount GetValueIn(const CTransaction &tx) const;
 
     //! Check whether all prevouts of the transaction are present in the UTXO set represented by this view
-    bool HaveInputs(const CTransaction &tx) const;
+    bool HaveInputs(const CTransaction &tx, bool fLockLevel = true) const;
 
     /**
      * Return priority of tx at height nHeight. Also calculate the sum of the values of the inputs
@@ -400,7 +400,7 @@ public:
 protected:
     // returns an iterator pointing to the coin and lock is taken (caller must unlock when finished with iterator)
     // If lock is nullptr, the writelock must already be taken.
-    CCoinsMap::iterator FetchCoin(const COutPoint &outpoint, CDeferredSharedLocker *lock) const;
+    CCoinsMap::iterator FetchCoin(const COutPoint &outpoint, CDeferredSharedLocker *lock, bool fLockLevel = true) const;
 
     /**
      * By making the copy constructor private, we prevent accidentally using it when one intends to create a cache on

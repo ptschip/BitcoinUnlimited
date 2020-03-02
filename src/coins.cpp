@@ -15,7 +15,7 @@
 #include <assert.h>
 Coin emptyCoin;
 bool CCoinsView::GetCoin(const COutPoint &outpoint, Coin &coin) const { return false; }
-bool CCoinsView::HaveCoin(const COutPoint &outpoint) const { return false; }
+bool CCoinsView::HaveCoin(const COutPoint &outpoint, bool fLockLevel) const { return false; }
 uint256 CCoinsView::_GetBestBlock() const { return uint256(); }
 bool CCoinsView::BatchWrite(CCoinsMap &mapCoins,
     const uint256 &hashBlock,
@@ -27,7 +27,7 @@ bool CCoinsView::BatchWrite(CCoinsMap &mapCoins,
 CCoinsViewCursor *CCoinsView::Cursor() const { return nullptr; }
 CCoinsViewBacked::CCoinsViewBacked(CCoinsView *viewIn) : base(viewIn) {}
 bool CCoinsViewBacked::GetCoin(const COutPoint &outpoint, Coin &coin) const { return base->GetCoin(outpoint, coin); }
-bool CCoinsViewBacked::HaveCoin(const COutPoint &outpoint) const { return base->HaveCoin(outpoint); }
+bool CCoinsViewBacked::HaveCoin(const COutPoint &outpoint, bool fLockLevel) const { return base->HaveCoin(outpoint, fLockLevel); }
 uint256 CCoinsViewBacked::_GetBestBlock() const { return base->GetBestBlock(); }
 void CCoinsViewBacked::SetBackend(CCoinsView &viewIn) { base = &viewIn; }
 bool CCoinsViewBacked::BatchWrite(CCoinsMap &mapCoins,
@@ -73,17 +73,18 @@ size_t CCoinsViewCache::ResetCachedCoinUsage() const
     return newCachedCoinsUsage;
 }
 
-CCoinsMap::iterator CCoinsViewCache::FetchCoin(const COutPoint &outpoint, CDeferredSharedLocker *lock) const
+CCoinsMap::iterator CCoinsViewCache::FetchCoin(const COutPoint &outpoint, CDeferredSharedLocker *lock, bool fLockLevel) const
 {
     // When fetching a coin, we only need the shared lock if the coin exists in the cache.
     // So we have the Locker object take the shared lock and return with the read lock held if the coin was in cache.
     {
-        if (lock)
+        fLockLevel = true;
+        if (lock && fLockLevel)
             lock->lock_shared();
         CCoinsMap::iterator it = cacheCoins.find(outpoint);
         if (it != cacheCoins.end())
             return it;
-        if (lock)
+        if (lock && fLockLevel)
             lock->unlock();
     }
     Coin tmp;
@@ -91,7 +92,7 @@ CCoinsMap::iterator CCoinsViewCache::FetchCoin(const COutPoint &outpoint, CDefer
         return cacheCoins.end();
 
     // But if the coin is NOT in the cache, we need to grab the exclusive lock in order to modify the cache
-    if (lock)
+    if (lock && fLockLevel)
         lock->lock();
     CCoinsMap::iterator ret =
         cacheCoins
@@ -197,10 +198,10 @@ const Coin &CCoinsViewCache::_AccessCoin(const COutPoint &outpoint) const
     }
 }
 
-bool CCoinsViewCache::HaveCoin(const COutPoint &outpoint) const
+bool CCoinsViewCache::HaveCoin(const COutPoint &outpoint, bool fLockLevel) const
 {
     CDeferredSharedLocker lock(cs_utxo);
-    CCoinsMap::const_iterator it = FetchCoin(outpoint, &lock);
+    CCoinsMap::const_iterator it = FetchCoin(outpoint, &lock, fLockLevel);
     return (it != cacheCoins.end() && !it->second.coin.IsSpent());
 }
 
@@ -484,13 +485,13 @@ CAmount CCoinsViewCache::GetValueIn(const CTransaction &tx) const
     return nResult;
 }
 
-bool CCoinsViewCache::HaveInputs(const CTransaction &tx) const
+bool CCoinsViewCache::HaveInputs(const CTransaction &tx, bool fLockLevel) const
 {
     if (!tx.IsCoinBase())
     {
         for (unsigned int i = 0; i < tx.vin.size(); i++)
         {
-            if (!HaveCoin(tx.vin[i].prevout))
+            if (!HaveCoin(tx.vin[i].prevout, fLockLevel))
             {
                 return false;
             }
