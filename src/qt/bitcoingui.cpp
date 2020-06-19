@@ -704,9 +704,9 @@ void BitcoinGUI::setNumBlocks(int count, const QDateTime &blockDate, double nVer
 {
     if (modalOverlay)
     {
+        modalOverlay->setKnownBestHeight(count, blockDate);
         if (!fHeader)
         {
-            modalOverlay->setKnownBestHeight(count, blockDate);
             modalOverlay->tipUpdate(count, blockDate, nVerificationProgress);
         }
     }
