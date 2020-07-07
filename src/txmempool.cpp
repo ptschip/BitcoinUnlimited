@@ -946,6 +946,37 @@ void CTxMemPool::removeForReorg(const CCoinsViewCache *pcoins, unsigned int nMem
     }
 }
 
+void CTxMemPool::removeAlreadySpent(const CCoinsViewCache *pcoins)
+{
+    // Remove transactions spending a coinbase which are now immature and no-longer-final transactions
+    AssertWriteLockHeld(cs_txmempool);
+    list<CTransaction> transactionsToRemove;
+    for (indexed_transaction_set::const_iterator it = mapTx.begin(); it != mapTx.end(); it++)
+    {
+        const CTransactionRef tx = it->GetSharedTx();
+//        LockPoints lp = it->GetLockPoints();
+//        bool validLP = TestLockPointValidity(&lp);
+
+            for (const CTxIn &txin : tx->vin)
+            {
+                indexed_transaction_set::const_iterator it2 = mapTx.find(txin.prevout.hash);
+                if (it2 != mapTx.end())
+                    continue;
+                CoinAccessor coin(*pcoins, txin.prevout);
+                if (coin->IsSpent())
+                {
+LOGA("############ Double Spend found in mempool - removing it\n");
+                    transactionsToRemove.push_back(*tx);
+                }
+            }
+    }
+    for (const CTransaction &tx : transactionsToRemove)
+    {
+        std::list<CTransactionRef> removed;
+        _removeRecursive(tx, removed);
+    }
+}
+
 void CTxMemPool::removeConflicts(const CTransaction &tx, std::list<CTransactionRef> &removed)
 {
     WRITELOCK(cs_txmempool);
@@ -1107,6 +1138,8 @@ void CTxMemPool::removeForBlock(const std::vector<CTransactionRef> &vtx,
         _removeConflicts(*tx, conflicts);
         _ClearPrioritisation(tx->GetHash());
     }
+
+    removeAlreadySpent(pcoinsTip);
 
     // With the cs_txmepool lock on, resubmit the txCommitQ so we don't allow txns back into
     // the mempool that may be ancestors of txns that were in the block we just processed.  If we allowed

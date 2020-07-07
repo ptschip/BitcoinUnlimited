@@ -641,6 +641,7 @@ public:
     void removeRecursive(const CTransaction &tx, std::list<CTransactionRef> &removed);
     void _removeRecursive(const CTransaction &tx, std::list<CTransactionRef> &removed);
     void removeForReorg(const CCoinsViewCache *pcoins, unsigned int nMemPoolHeight, int flags);
+    void removeAlreadySpent(const CCoinsViewCache *pcoins);
     void removeConflicts(const CTransaction &tx, std::list<CTransactionRef> &removed);
     void _removeConflicts(const CTransaction &tx, std::list<CTransactionRef> &removed);
     void removeForBlock(const std::vector<CTransactionRef> &vtx,
